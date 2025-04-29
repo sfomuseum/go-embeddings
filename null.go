@@ -38,7 +38,7 @@ func (e *NullEmbedder) Embeddings32(ctx context.Context, content string) ([]floa
 		return nil, err
 	}
 
-	return asFloat32(e64), nil
+	return AsFloat32(e64), nil
 }
 
 func (e *NullEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
@@ -55,5 +55,5 @@ func (e *NullEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]fl
 		return nil, err
 	}
 
-	return asFloat32(e64), nil
+	return AsFloat32(e64), nil
 }

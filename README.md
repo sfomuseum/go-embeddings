@@ -26,6 +26,8 @@ type Embedder interface {
 
 ## Default implementations
 
+The rule of thumb is that if an `embeddings.Embedder` implementation can be defined without any external dependencies it is included here. Otherwise it is included in its own package.
+
 ### LlamafileEmbedder
 
 The `LlamafileEmbedder` implementation uses the [llamafile application's REST API](https://github.com/Mozilla-Ocho/llamafile/blob/main/llama.cpp/server/README.md#api-endpoints) to generate embeddings for a text. This package assumes that the llamafile application has already installed, is running and set up to use the models necessary to generate embeddings. Please consult the [llamafile documentation](https://github.com/Mozilla-Ocho/llamafile/tree/main) for details.
@@ -36,7 +38,7 @@ The syntax for creating a new `LlamafileEmbedder` is:
 import (
 	"context"
 	
-	"github.com/whosonfirst/go-dedupe/embeddings"
+	"github.com/sfomuseum/go-embeddings"
 )
 
 ctx := context.Background()
@@ -63,7 +65,7 @@ The syntax for creating a new `OpenCLIPEmbedder` is:
 import (
 	"context"
 	
-	"github.com/whosonfirst/go-dedupe/embeddings"
+	"github.com/sfomuseum/go-embeddings"
 )
 
 ctx := context.Background()

@@ -1,6 +1,6 @@
 package embeddings
 
-func asFloat32(data []float64) []float32 {
+func AsFloat32(data []float64) []float32 {
 
 	e32 := make([]float32, len(data))
 
@@ -12,7 +12,7 @@ func asFloat32(data []float64) []float32 {
 	return e32
 }
 
-func asFloat64(data []float32) []float64 {
+func AsFloat64(data []float32) []float64 {
 
 	e64 := make([]float64, len(data))
 
