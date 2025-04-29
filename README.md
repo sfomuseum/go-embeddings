@@ -1,6 +1,14 @@
-# Embeddings
+# go-embeddings
 
-## embeddings.Embedder
+Go package defining a common interface for generating text and image embeddings.
+
+## Documentation
+
+Documentation is incomplete at this time.
+
+## Interfaces
+
+### embeddings.Embedder
 
 ```
 // Embedder defines an interface for generating (vector) embeddings
