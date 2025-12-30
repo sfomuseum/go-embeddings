@@ -18,7 +18,7 @@ type MobileCLIPEmbeddingRequest struct {
 }
 
 type MobileCLIPEmbeddingResponse struct {
-	Embeddings []float64 `json:"embedding"`
+	Embeddings []float64 `json:"embeddings"`
 	Dimensions int       `json:"dimensions"`
 	Model      string    `json:"model"`
 	Type       string    `json:"type"`
@@ -178,10 +178,14 @@ func (e *MobileCLIPEmbedder) embeddings(ctx context.Context, mobileclip_req *Mob
 		return nil, err
 	}
 
-	args = append(args, "--path")
+	if len(mobileclip_req.ImageData) > 0 {
+		args = append(args, "--path")
+	}
+
 	args = append(args, wr.Name())
 
 	cmd := exec.CommandContext(ctx, e.tool, args...)
+
 	body, err := cmd.Output()
 
 	if err != nil {
