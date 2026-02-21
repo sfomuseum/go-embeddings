@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package org_sfomuseum_embeddings_service;
+option go_package = "github.com/sfomuseum/go-mobileclip/grpc";
+
+service EmbeddingsService {
+    rpc ComputeTextEmbeddings(EmbeddingsRequest) returns (EmbeddingsResponse) {}
+    rpc ComputeImageEmbeddings(EmbeddingsRequest) returns (EmbeddingsResponse) {}
+}
+
+message EmbeddingsRequest {
+    string id = 1;
+    string model = 2;
+    bytes body = 3;
+}
+
+message EmbeddingsResponse {
+    string id = 1;
+    string model = 2;
+    int32 dimensions = 3;
+    repeated float embeddings = 4;
+    int64 created = 5;
+}
