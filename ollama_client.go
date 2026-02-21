@@ -1,5 +1,7 @@
 package embeddings
 
+// https://docs.ollama.com/api/introduction
+
 import (
 	"bytes"
 	"context"
