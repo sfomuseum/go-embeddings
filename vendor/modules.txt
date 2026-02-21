@@ -1,6 +1,10 @@
 # github.com/aaronland/go-roster v1.0.0
 ## explicit; go 1.16
 github.com/aaronland/go-roster
+# github.com/sfomuseum/go-encoderfile v0.0.0-20260216184700-58274ed621e8
+## explicit; go 1.25.0
+github.com/sfomuseum/go-encoderfile/client
+github.com/sfomuseum/go-encoderfile/embeddings
 # github.com/sfomuseum/go-mobileclip v0.1.1
 ## explicit; go 1.25.2
 github.com/sfomuseum/go-mobileclip

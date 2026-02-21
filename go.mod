@@ -4,6 +4,7 @@ go 1.25.2
 
 require (
 	github.com/aaronland/go-roster v1.0.0
+	github.com/sfomuseum/go-encoderfile v0.0.0-20260216184700-58274ed621e8
 	github.com/sfomuseum/go-mobileclip v0.1.1
 )
 
