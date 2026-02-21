@@ -129,7 +129,7 @@ func (e *LlamafileEmbedder) Embeddings32(ctx context.Context, content string) ([
 		return nil, err
 	}
 
-	return asFloat32(e64), nil
+	return AsFloat32(e64), nil
 }
 
 func (e *LlamafileEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
@@ -167,7 +167,7 @@ func (e *LlamafileEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) 
 		return nil, err
 	}
 
-	return asFloat32(e64), nil
+	return AsFloat32(e64), nil
 }
 
 func (e *LlamafileEmbedder) embeddings(ctx context.Context, llamafile_req *LlamafileEmbeddingRequest) (*LlamafileEmbeddingResponse, error) {

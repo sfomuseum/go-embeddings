@@ -30,50 +30,63 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// START OF make me a function
+	var embeddings_rsp []float32
+	var embeddings_err error
 
-	var body string
+	switch args[0] {
+	case "text":
 
-	switch len(args) {
-	case 1:
+		var body string
 
-		switch args[0] {
-		case "-":
+		switch len(args) {
+		case 2:
 
-			b, err := io.ReadAll(os.Stdin)
+			switch args[1] {
+			case "-":
 
-			if err != nil {
-				log.Fatalf("Failed to read STDIN, %v", err)
+				b, err := io.ReadAll(os.Stdin)
+
+				if err != nil {
+					log.Fatalf("Failed to read STDIN, %v", err)
+				}
+
+				body = string(b)
+			default:
+
+				b, err := os.ReadFile(args[1])
+
+				if err != nil {
+					log.Fatalf("Failed to read file, %v", err)
+				}
+
+				body = string(b)
 			}
 
-			body = string(b)
 		default:
-
-			b, err := os.ReadFile(args[0])
-
-			if err != nil {
-				log.Fatalf("Failed to read file, %v", err)
-			}
-
-			body = string(b)
+			body = strings.Join(args[1:], " ")
 		}
 
-	default:
-		body = strings.Join(args[0:], " ")
+		embeddings_rsp, embeddings_err = cl.Embeddings32(ctx, body)
+
+	case "image":
+
+		body, err := os.ReadFile(args[1])
+
+		if err != nil {
+			log.Fatalf("Failed to read file, %v", err)
+		}
+
+		embeddings_rsp, embeddings_err = cl.ImageEmbeddings32(ctx, body)
 	}
 
-	// END OF make me a function
-
-	rsp, err := cl.Embeddings32(ctx, body)
-
-	if err != nil {
-		log.Fatal(err)
+	if embeddings_err != nil {
+		log.Fatalf("Failed to derive embeddings, %v", embeddings_err)
 	}
 
 	enc := json.NewEncoder(os.Stdout)
-	err = enc.Encode(rsp)
+	err = enc.Encode(embeddings_rsp)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to encode embeddings, %v", err)
 	}
 }

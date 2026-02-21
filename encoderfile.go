@@ -1,4 +1,10 @@
+//go:build encoderfile
+
 package embeddings
+
+// go run -mod vendor -tags encoderfile cmd/embeddings/main.go -client-uri 'encoderfile://?client-uri=http://localhost:8080' text ./README.md
+// go run -mod vendor -tags encoderfile cmd/embeddings/main.go -client-uri 'encoderfile://?client-uri=http://localhost:8080' image ~/Desktop/test22.png
+// 2026/02/20 16:56:51 Failed to derive embeddings, Not implemented
 
 import (
 	"context"

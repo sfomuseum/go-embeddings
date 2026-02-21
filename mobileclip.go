@@ -1,4 +1,9 @@
+//go:build mobileclip
+
 package embeddings
+
+// go run -mod vendor -tags mobileclip cmd/embeddings/main.go -client-uri 'mobileclip://?client-uri=grpc://localhost:8080&model=s0' text hello world
+// go run -mod vendor -tags mobileclip cmd/embeddings/main.go -client-uri 'mobileclip://?client-uri=grpc://localhost:8080&model=s0' image ~/Desktop/test22.png
 
 import (
 	"context"
@@ -34,10 +39,10 @@ func NewMobileCLIPEmbedder(ctx context.Context, uri string) (Embedder, error) {
 
 	q := u.Query()
 
-	mobileclip_uri := q.Get("client-uri")
+	client_uri := q.Get("client-uri")
 	model := q.Get("model")
 
-	cl, err := mobileclip.NewEmbeddingsClient(ctx, mobileclip_uri)
+	cl, err := mobileclip.NewEmbeddingsClient(ctx, client_uri)
 
 	if err != nil {
 		return nil, err
