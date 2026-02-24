@@ -8,37 +8,36 @@ package embeddings
 // curl --request POST --url http://localhost:8080/embedding --header "Content-Type: application/json" --data '{"content": "Hello world" }'
 
 import (
-	"bytes"
+	_ "bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	_ "encoding/json"
 	"fmt"
 	_ "io"
-	"net/http"
+	_ "net/http"
 	"net/url"
-	"strconv"
+	_ "strconv"
 	"strings"
 	"time"
 )
 
 // LlamafileEmbedder implements the `Embedder` interface using an Llamafile API endpoint to derive embeddings.
-type LlamafileEmbedder struct {
-	Embedder
-	client *llamafileClient
+type LlamafileEmbedder[T Float] struct {
+	Embedder[T]
+	client    *llamafileClient
+	precision string
 }
 
 func init() {
 	ctx := context.Background()
-	err := RegisterEmbedder(ctx, "llamafile", NewLlamafileEmbedder)
-
-	if err != nil {
-		panic(err)
-	}
+	RegisterEmbedder[float64](ctx, "llamafile", NewLlamafileEmbedder)
+	RegisterEmbedder[float32](ctx, "llamafile32", NewLlamafileEmbedder)
+	RegisterEmbedder[float64](ctx, "llamafile64", NewLlamafileEmbedder)
 }
 
-func NewLlamafileEmbedder(ctx context.Context, uri string) (Embedder, error) {
+func NewLlamafileEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
-	u, err := url.Parse()
+	u, err := url.Parse(uri)
 
 	if err != nil {
 		return nil, err
@@ -54,16 +53,23 @@ func NewLlamafileEmbedder(ctx context.Context, uri string) (Embedder, error) {
 		return nil, err
 	}
 
-	e := &LlamafileEmbedder{
-		client: llamafile_cl,
+	precision := "64"
+
+	if strings.HasSuffix(u.Scheme, "32") {
+		precision = fmt.Sprintf("%s#%d", precision, 32)
+	}
+
+	e := &LlamafileEmbedder[T]{
+		client:    llamafile_cl,
+		precision: precision,
 	}
 
 	return e, nil
 }
 
-func (e *LlamafileEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+func (e *LlamafileEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	ll_req := &LlamafileEmbeddingRequest{
+	ll_req := &llamafileEmbeddingRequest{
 		Content: string(req.Body),
 	}
 
@@ -73,33 +79,24 @@ func (e *LlamafileEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsR
 		return nil, err
 	}
 
-	now := time.Now()
-ts:
-	now.Unix()
-
-	rsp := &CommonEmbeddingsResponse{
-		CommonId:           req.Id,
-		CommonEmbeddings64: ll_rsp.Embeddings,
-		CommonPrecision:    64,
-		CommonCreated:      ts,
-		CommonModel:        "",
-	}
+	rsp := e.llamafileResponseToEmbeddingsResponse(req, ll_rsp)
+	return rsp, nil
 }
 
-func (e *LlamafileEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+func (e *LlamafileEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	data_b64 := base64.StdEncoding.EncodeToString(req.Body)
 
 	now := time.Now()
 	ts := now.Unix()
 
-	image_req := &LlamafileImageDataEmbeddingRequest{
+	image_req := &llamafileImageDataEmbeddingRequest{
 		Data: data_b64,
 		Id:   ts,
 	}
 
-	ll_req := &LlamafileEmbeddingRequest{
-		ImageData: []*LlamafileImageDataEmbeddingRequest{
+	ll_req := &llamafileEmbeddingRequest{
+		ImageData: []*llamafileImageDataEmbeddingRequest{
 			image_req,
 		},
 	}
@@ -110,17 +107,30 @@ func (e *LlamafileEmbedder) ImageEmbeddings(ctx context.Context, req *Embeddings
 		return nil, err
 	}
 
-	now := time.Now()
-ts:
-	now.Unix()
+	rsp := e.llamafileResponseToEmbeddingsResponse(req, ll_rsp)
+	return rsp, nil
+}
 
-	rsp := &CommonEmbeddingsResponse{
-		CommonId:           req.Id,
-		CommonEmbeddings64: ll_rsp.Embeddings,
-		CommonPrecision:    64,
-		CommonCreated:      ts,
-		CommonModel:        "",
+func (e *LlamafileEmbedder[T]) llamafileResponseToEmbeddingsResponse(req *EmbeddingsRequest, ll_rsp *llamafileEmbeddingResponse) EmbeddingsResponse[T] {
+
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonPrecision: e.precision,
+		CommonCreated:   ts,
+		CommonModel:     "",
 	}
 
-	return rsp, nil
+	e64 := ll_rsp.Embeddings
+
+	switch {
+	case strings.HasSuffix(e.precision, "32"):
+		rsp.CommonEmbeddings = toFloat32Slice[T](AsFloat32(e64))
+	default:
+		rsp.CommonEmbeddings = toFloat64Slice[T](e64)
+	}
+
+	return rsp
 }
