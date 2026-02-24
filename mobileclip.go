@@ -56,18 +56,7 @@ func NewMobileCLIPEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *MobileCLIPEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
-
-	rsp32, err := e.Embeddings32(ctx, req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return EmbeddingsResponse32AsEmbeddingsResponse(rsp32)
-}
-
-func (e *MobileCLIPEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
+func (e *MobileCLIPEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
 
 	mc_req := &mobileclip.EmbeddingsRequest{
 		Model: e.model,
@@ -83,28 +72,18 @@ func (e *MobileCLIPEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRe
 	now := time.Now()
 	ts := now.Unix()
 
-	rsp32 := &EmbeddingsResponse32{
-		Id:         req.Id,
-		Embeddings: mc_rsp.Embeddings,
-		Model:      e.model,
-		Created:    ts,
+	rsp32 := &CommonEmbeddingsResponse{
+		CommonId:           req.Id,
+		CommonEmbeddings32: mc_rsp.Embeddings,
+		CommonModel:        e.model,
+		CommonCreated:      ts,
+		CommonPrecsion:     32,
 	}
 
 	return rsp32, nil
 }
 
-func (e *MobileCLIPEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
-
-	rsp32, err := e.ImageEmbeddings32(ctx, req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return EmbeddingsResponse32AsEmbeddingsResponse(rsp32)
-}
-
-func (e *MobileCLIPEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
+func (e *MobileCLIPEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
 
 	mc_req := &mobileclip.EmbeddingsRequest{
 		Model: e.model,
@@ -120,11 +99,12 @@ func (e *MobileCLIPEmbedder) ImageEmbeddings32(ctx context.Context, req *Embeddi
 	now := time.Now()
 	ts := now.Unix()
 
-	rsp32 := &EmbeddingsResponse32{
+	rsp32 := &CommonEmbeddingsResponse{
 		Id:         req.Id,
 		Embeddings: mc_rsp.Embeddings,
 		Model:      e.model,
 		Created:    ts,
+		Precision:  32,
 	}
 
 	return rsp32, nil

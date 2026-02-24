@@ -25,52 +25,26 @@ func NewNullEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *NullEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
+func (e *NullEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+	return e.nullEmbeddings(ctx, req)
+}
+
+func (e *NullEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+	return e.nullEmbeddings(ctx, req)
+}
+
+func (e *NullEmbedder) nullEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
 
 	now := time.Now()
 	ts := now.Unix()
 
-	rsp := &EmbeddingsResponse{
-		Embeddings: make([]float64, 0),
-		Model:      "null",
-		Created:    ts,
+	rsp := &CommonEmbeddingsResponse{
+		CommonId:           req.Id,
+		CommonEmbeddings64: make([]float64, 0),
+		CommonModel:        "null",
+		CommonCreated:      ts,
+		CommonPrecision:    64,
 	}
 
 	return rsp, nil
-}
-
-func (e *NullEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
-
-	rsp64, err := e.Embeddings(ctx, req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return EmbeddingsResponseToEmbeddingsResponse32(rsp64), nil
-}
-
-func (e *NullEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
-
-	now := time.Now()
-	ts := now.Unix()
-
-	rsp := &EmbeddingsResponse{
-		Embeddings: make([]float64, 0),
-		Model:      "null",
-		Created:    ts,
-	}
-
-	return rsp, nil
-}
-
-func (e *NullEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
-
-	rsp64, err := e.Embeddings(ctx, req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return EmbeddingsResponseToEmbeddingsResponse32(rsp64), nil
 }

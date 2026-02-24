@@ -27,7 +27,7 @@ func TestEncoderfileEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp.Embeddings) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }

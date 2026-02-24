@@ -70,7 +70,7 @@ func main() {
 			Body: body,
 		}
 
-		embeddings_rsp, embeddings_err = cl.Embeddings32(ctx, req)
+		embeddings_rsp, embeddings_err = cl.TextEmbeddings(ctx, req)
 
 	case "image":
 
@@ -84,7 +84,7 @@ func main() {
 			Body: body,
 		}
 
-		embeddings_rsp, embeddings_err = cl.ImageEmbeddings32(ctx, req)
+		embeddings_rsp, embeddings_err = cl.ImageEmbeddings(ctx, req)
 	}
 
 	if embeddings_err != nil {

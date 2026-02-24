@@ -10,71 +10,10 @@ import (
 	"github.com/aaronland/go-roster"
 )
 
-type EmbeddingsPrecision uint8
-
-const (
-	_         EmbeddingsPrecision = iota
-	Micro                         // 4
-	Mini                          // 8
-	Half                          // 16
-	Single                        // 32
-	Double                        // 64
-	Quadruple                     // 128
-)
-
-type EmbeddingsRequest struct {
-	Id    string `json:"id,omitempty"`
-	Model string `json:"model"`
-	Body  []byte `json:"body"`
-}
-
-type EmbeddingsResponseTest interface {
-	Id() string
-	Model() string
-	Embeddings32() []float32
-	Embeddings64() []float64
-	Dimensions() int32
-	Precision() uint8
-	Created() int64
-}
-
-type CommonEmbeddingsResponse struct {
-	EmbeddingsResponseTest
-	CommonId           string    `json:"id,omitempty"`
-	CommonEmbeddings64 []float64 `json:"embeddings64,omitempty"`
-	CommonEmbeddings32 []float32 `json:"embeddings32,omitempty"`
-	CommonDimensions   int32     `json:"dimensions"`
-	CommonModel        string    `json:"model"`
-	CommonCreated      int64     `json:"created"`
-	CommonPrecision    uint8     `json:"precision"`
-}
-
-type EmbeddingsResponse struct {
-	Id         string    `json:"id,omitempty"`
-	Embeddings []float64 `json:"embeddings"`
-	Dimensions int32     `json:"dimensions"`
-	Model      string    `json:"model"`
-	Created    int64     `json:"created"`
-}
-
-type EmbeddingsResponse32 struct {
-	Id         string    `json:"id,omitempty"`
-	Embeddings []float32 `json:"embeddings"`
-	Dimensions int32     `json:"dimensions"`
-	Model      string    `json:"model"`
-	Created    int64     `json:"created"`
-}
-
 // Embedder defines an interface for generating (vector) embeddings
 type Embedder interface {
-	// Embeddings returns ...
-	Embeddings(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse, error)
-	// Embeddings32 returns ...
-	Embeddings32(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse32, error)
-	// ImageEmbeddings returns ...
-	ImageEmbeddings(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse, error)
-	// ImageEmbeddings32 returns ...
-	ImageEmbeddings32(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse32, error)
+	TextEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse, error)
+	ImageEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse, error)
 }
 
 // EmbedderInitializationFunc is a function defined by individual embedder package and used to create

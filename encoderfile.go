@@ -58,40 +58,19 @@ func NewEncoderfileEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *EncoderfileEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
-
-	rsp32, err := e.Embeddings32(ctx, req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	e64 := AsFloat64(rsp32.Embeddings)
-
-	rsp64 := &EmbeddingsResponse{
-		Id:         rsp32.Model,
-		Embeddings: e64,
-		Dimensions: rsp32.Dimensions,
-		Model:      rsp32.Model,
-		Created:    rsp32.Created,
-	}
-
-	return rsp64, nil
-}
-
-func (e *EncoderfileEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) ([]float32, error) {
+func (e *EncoderfileEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
 
 	input := []string{
 		string(req.Body),
 	}
 
-	rsp, err := e.client.Embeddings(ctx, input, e.normalize)
+	cl_rsp, err := e.client.Embeddings(ctx, input, e.normalize)
 
 	if err != nil {
 		return nil, err
 	}
 
-	pooled, err := embeddings.PoolOutputResults(rsp)
+	pooled, err := embeddings.PoolOutputResults(cl_rsp)
 
 	if err != nil {
 		return nil, err
@@ -102,23 +81,17 @@ func (e *EncoderfileEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsR
 	now := time.Now()
 	ts := now.Unix()
 
-	rsp32 := &EmbeddingsResponse32{
-		Id:         req.Id,
-		Embeddings: e32,
-		Dimensions: len(e32[0]),
-		Model:      "fixme",
-		Created:    ts,
+	rsp := &CommonEmbeddingsResponse{
+		Id:           req.Id,
+		Embeddings32: e32,
+		Precision:    32,
+		Model:        "fixme",
+		Created:      ts,
 	}
 
-	return rsp32, nil
+	return rsp, nil
 }
 
-func (e *EncoderfileEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
-
-	return nil, NotImplemented
-}
-
-func (e *EncoderfileEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
-
+func (e *EncoderfileEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
 	return nil, NotImplemented
 }

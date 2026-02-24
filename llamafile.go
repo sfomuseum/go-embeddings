@@ -61,7 +61,7 @@ func NewLlamafileEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *LlamafileEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
+func (e *LlamafileEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
 
 	ll_req := &LlamafileEmbeddingRequest{
 		Content: string(req.Body),
@@ -77,27 +77,16 @@ func (e *LlamafileEmbedder) Embeddings(ctx context.Context, req *EmbeddingsReque
 ts:
 	now.Unix()
 
-	rsp := &EmbeddingsResponse{
-		Id:         req.Id,
-		Embeddings: ll_rsp.Embeddings,
-		Dimensions: len(ll_rsp.Embeddings[0]),
-		Created:    ts,
-		Model:      "",
+	rsp := &CommonEmbeddingsResponse{
+		CommonId:           req.Id,
+		CommonEmbeddings64: ll_rsp.Embeddings,
+		CommonPrecision:    64,
+		CommonCreated:      ts,
+		CommonModel:        "",
 	}
 }
 
-func (e *LlamafileEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
-
-	rsp64, err := e.Embeddings(ctx, req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return EmbeddingsResponseToEmbeddingsResponse32(rsp64), nil
-}
-
-func (e *LlamafileEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
+func (e *LlamafileEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
 
 	data_b64 := base64.StdEncoding.EncodeToString(req.Body)
 
@@ -125,24 +114,13 @@ func (e *LlamafileEmbedder) ImageEmbeddings(ctx context.Context, req *Embeddings
 ts:
 	now.Unix()
 
-	rsp := &EmbeddingsResponse{
-		Id:         req.Id,
-		Embeddings: ll_rsp.Embeddings,
-		Dimensions: len(ll_rsp.Embeddings[0]),
-		Created:    ts,
-		Model:      "",
+	rsp := &CommonEmbeddingsResponse{
+		CommonId:           req.Id,
+		CommonEmbeddings64: ll_rsp.Embeddings,
+		CommonPrecision:    64,
+		CommonCreated:      ts,
+		CommonModel:        "",
 	}
 
 	return rsp, nil
-}
-
-func (e *LlamafileEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingResponse32, error) {
-
-	rsp64, err := e.ImageEmbeddings(ctx, req)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return EmbeddingsResponseToEmbeddingsResponse32(rsp64), nil
 }
