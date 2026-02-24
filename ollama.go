@@ -73,32 +73,42 @@ func NewOllamaEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *OllamaEmbedder) Embeddings(ctx context.Context, content string) ([]float64, error) {
+func (e *OllamaEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
-	e32, err := e.Embeddings32(ctx, content)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return AsFloat64(e32), nil
-}
-
-func (e *OllamaEmbedder) Embeddings32(ctx context.Context, content string) ([]float32, error) {
-
-	rsp, err := e.client.embeddings(ctx, e.model, content)
+	rsp32, err := e.Embeddings32(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings[0], nil
+	return Embeddings32ResponseToEmbeddingsResponse(rsp32)
 }
 
-func (e *OllamaEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
+func (e *OllamaEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
+
+	cl_rsp, err := e.client.embeddings(ctx, e.model, string(req.Body))
+
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp32 := &EmbeddingsResponse32{
+		Id:         req.Id,
+		Model:      e.model,
+		Embeddings: cl_rsp.Embeddings[0],
+		Created:    ts,
+	}
+
+	return rsp32, nil
+}
+
+func (e *OllamaEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse64, error) {
 	return nil, NotImplemented
 }
 
-func (e *OllamaEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]float32, error) {
+func (e *OllamaEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 	return nil, NotImplemented
 }

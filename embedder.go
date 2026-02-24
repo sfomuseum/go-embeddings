@@ -10,10 +10,43 @@ import (
 	"github.com/aaronland/go-roster"
 )
 
+type EmbeddingsPrecision uint8
+
+const (
+	_         EmbeddingsPrecision = iota
+	Micro                         // 4
+	Mini                          // 8
+	Half                          // 16
+	Single                        // 32
+	Double                        // 64
+	Quadruple                     // 128
+)
+
 type EmbeddingsRequest struct {
 	Id    string `json:"id,omitempty"`
 	Model string `json:"model"`
 	Body  []byte `json:"body"`
+}
+
+type EmbeddingsResponseTest interface {
+	Id() string
+	Model() string
+	Embeddings32() []float32
+	Embeddings64() []float64
+	Dimensions() int32
+	Precision() uint8
+	Created() int64
+}
+
+type CommonEmbeddingsResponse struct {
+	EmbeddingsResponseTest
+	CommonId           string    `json:"id,omitempty"`
+	CommonEmbeddings64 []float64 `json:"embeddings64,omitempty"`
+	CommonEmbeddings32 []float32 `json:"embeddings32,omitempty"`
+	CommonDimensions   int32     `json:"dimensions"`
+	CommonModel        string    `json:"model"`
+	CommonCreated      int64     `json:"created"`
+	CommonPrecision    uint8     `json:"precision"`
 }
 
 type EmbeddingsResponse struct {

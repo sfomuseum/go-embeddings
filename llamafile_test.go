@@ -19,7 +19,7 @@ func TestLlamafileEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
-	res := &EmbeddingsRequest{
+	req := &EmbeddingsRequest{
 		Body: []byte("Hello world"),
 	}
 

@@ -103,35 +103,46 @@ func NewOpenCLIPEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *OpenCLIPEmbedder) Embeddings(ctx context.Context, content string) ([]float64, error) {
+func (e *OpenCLIPEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
-	req := &OpenCLIPEmbeddingRequest{
-		Content: content,
+	cl_req := &OpenCLIPEmbeddingRequest{
+		Content: string(req.Body),
 	}
 
-	rsp, err := e.embeddings(ctx, req)
+	cl_rsp, err := e.embeddings(ctx, cl_req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings, nil
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp64 := &EmbeddingsResponse{
+		Id:         req.Id,
+		Model:      "openclip",
+		Embeddings: cl_rsp.Embeddings,
+		Dimensions: len(cl_rsp.Embeddings[0]),
+		Created:    ts,
+	}
+
+	return rsp64, nil
 }
 
-func (e *OpenCLIPEmbedder) Embeddings32(ctx context.Context, content string) ([]float32, error) {
+func (e *OpenCLIPEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
-	e64, err := e.Embeddings(ctx, content)
+	rsp64, err := e.Embeddings(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return asFloat32(e64), nil
+	return EmbeddingsResponseToEmbeddingsResponse32(rsp64)
 }
 
-func (e *OpenCLIPEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
+func (e *OpenCLIPEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
-	data_b64 := base64.StdEncoding.EncodeToString(data)
+	data_b64 := base64.StdEncoding.EncodeToString(req.Body)
 
 	now := time.Now()
 	ts := now.Unix()
@@ -141,30 +152,40 @@ func (e *OpenCLIPEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]
 		Id:   ts,
 	}
 
-	req := &OpenCLIPEmbeddingRequest{
+	cl_req := &OpenCLIPEmbeddingRequest{
 		ImageData: []*OpenCLIPImageDataEmbeddingRequest{
 			image_req,
 		},
 	}
 
-	rsp, err := e.embeddings(ctx, req)
+	cl_rsp, err := e.embeddings(ctx, cl_req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings, nil
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp64 := &EmbeddingsResponse{
+		Id:         req.Id,
+		Model:      "openclip",
+		Embeddings: rsp.Embeddings,
+		Created:    ts,
+	}
+
+	return rsp64, nil
 }
 
-func (e *OpenCLIPEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]float32, error) {
+func (e *OpenCLIPEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
-	e64, err := e.ImageEmbeddings(ctx, data)
+	rsp64, err := e.ImageEmbeddings(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return asFloat32(e64), nil
+	return EmbeddingsResponseToEmbeddingsResponse32(rsp64)
 }
 
 func (e *OpenCLIPEmbedder) embeddings(ctx context.Context, openclip_req *OpenCLIPEmbeddingRequest) (*OpenCLIPEmbeddingResponse, error) {

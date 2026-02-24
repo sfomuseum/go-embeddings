@@ -2,6 +2,7 @@ package embeddings
 
 import (
 	"context"
+	"time"
 )
 
 // NullEmbedder implements the `Embedder` interface using an Null API endpoint to derive embeddings.
@@ -24,36 +25,52 @@ func NewNullEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *NullEmbedder) Embeddings(ctx context.Context, content string) ([]float64, error) {
+func (e *NullEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
-	embeddings := make([]float64, 0)
-	return embeddings, nil
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp := &EmbeddingsResponse{
+		Embeddings: make([]float64, 0),
+		Model:      "null",
+		Created:    ts,
+	}
+
+	return rsp, nil
 }
 
-func (e *NullEmbedder) Embeddings32(ctx context.Context, content string) ([]float32, error) {
+func (e *NullEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
-	e64, err := e.Embeddings(ctx, content)
+	rsp64, err := e.Embeddings(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return AsFloat32(e64), nil
+	return EmbeddingsResponseToEmbeddingsResponse32(rsp64), nil
 }
 
-func (e *NullEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
+func (e *NullEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
-	embeddings := make([]float64, 0)
-	return embeddings, nil
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp := &EmbeddingsResponse{
+		Embeddings: make([]float64, 0),
+		Model:      "null",
+		Created:    ts,
+	}
+
+	return rsp, nil
 }
 
-func (e *NullEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]float32, error) {
+func (e *NullEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
-	e64, err := e.ImageEmbeddings(ctx, data)
+	rsp64, err := e.Embeddings(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return AsFloat32(e64), nil
+	return EmbeddingsResponseToEmbeddingsResponse32(rsp64), nil
 }

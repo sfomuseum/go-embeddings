@@ -1,10 +1,10 @@
 package embeddings
 
-func EmbeddingsResponseToEmbeddingsResponse32(rsp64 *EmbeddingResponse) *EmbeddingResponse32 {
+func EmbeddingsResponseToEmbeddingsResponse32(rsp64 *EmbeddingsResponse) *EmbeddingsResponse32 {
 
 	e32 := AsFloat32(rsp64.Embeddings)
 
-	rsp32 := &EmbeddingsResponse{
+	rsp32 := &EmbeddingsResponse32{
 		Id:         rsp64.Id,
 		Embeddings: e32,
 		Dimensions: rsp64.Dimensions,
@@ -12,10 +12,10 @@ func EmbeddingsResponseToEmbeddingsResponse32(rsp64 *EmbeddingResponse) *Embeddi
 		Model:      rsp64.Model,
 	}
 
-	return rsp32, nil
+	return rsp32
 }
 
-func EmbeddingsResponse32ToEmbeddingsResponse(rsp32 *EmbeddingResponse32) *EmbeddingResponse {
+func EmbeddingsResponse32ToEmbeddingsResponse(rsp32 *EmbeddingsResponse32) *EmbeddingsResponse {
 
 	e64 := AsFloat64(rsp32.Embeddings)
 
@@ -27,7 +27,7 @@ func EmbeddingsResponse32ToEmbeddingsResponse(rsp32 *EmbeddingResponse32) *Embed
 		Model:      rsp32.Model,
 	}
 
-	return rsp32, nil
+	return rsp64
 }
 
 func AsFloat32(data []float64) []float32 {

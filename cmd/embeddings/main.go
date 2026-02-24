@@ -30,13 +30,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var embeddings_rsp []float32
+	var embeddings_rsp any
 	var embeddings_err error
 
 	switch args[0] {
 	case "text":
 
-		var body string
+		var body []byte
 
 		switch len(args) {
 		case 2:
@@ -50,7 +50,7 @@ func main() {
 					log.Fatalf("Failed to read STDIN, %v", err)
 				}
 
-				body = string(b)
+				body = b
 			default:
 
 				b, err := os.ReadFile(args[1])
@@ -59,14 +59,18 @@ func main() {
 					log.Fatalf("Failed to read file, %v", err)
 				}
 
-				body = string(b)
+				body = b
 			}
 
 		default:
-			body = strings.Join(args[1:], " ")
+			body = []byte(strings.Join(args[1:], " "))
 		}
 
-		embeddings_rsp, embeddings_err = cl.Embeddings32(ctx, body)
+		req := &embeddings.EmbeddingsRequest{
+			Body: body,
+		}
+
+		embeddings_rsp, embeddings_err = cl.Embeddings32(ctx, req)
 
 	case "image":
 
@@ -76,7 +80,11 @@ func main() {
 			log.Fatalf("Failed to read file, %v", err)
 		}
 
-		embeddings_rsp, embeddings_err = cl.ImageEmbeddings32(ctx, body)
+		req := &embeddings.EmbeddingsRequest{
+			Body: body,
+		}
+
+		embeddings_rsp, embeddings_err = cl.ImageEmbeddings32(ctx, req)
 	}
 
 	if embeddings_err != nil {
