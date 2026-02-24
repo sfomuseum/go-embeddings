@@ -150,30 +150,49 @@ func (e *openCLIPClient) embeddings(ctx context.Context, openclip_req *openCLIPE
 
 /*
 
-#  https://python.langchain.com/v0.2/docs/integrations/text_embedding/open_clip/
-from flask import Flask, request, jsonify
-from langchain_experimental.open_clip import OpenCLIPEmbeddings
-from PIL import Image
+"""
+python -m venv openclip
+cd openclip/
+bash bin/activate
+bin/pip install flask
+bin/pip install open_clip_torch
+bin/pip install Pillow
+
+Then, assuming the code below is in a file called openclip_server.py:
+
+bin/flask --app openclip_server run
+"""
+
 import tempfile
 import base64
 import os
 
-model="ViT-g-14"
-checkpoint="laion2b_s34b_b88k"
+from flask import Flask, request, jsonify
+import torch
+from PIL import Image
+import open_clip
 
-clip_embd = OpenCLIPEmbeddings(model_name=model, checkpoint=checkpoint)
+model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+model.eval()
+
+tokenizer = open_clip.get_tokenizer('ViT-B-32')
 
 app = Flask(__name__)
 
 @app.route("/embeddings", methods=['POST'])
 def embeddings():
+    
     req = request.json
-    embeddings = clip_embd.embed_documents([ req["data"] ])
-    return jsonify({"embedding": embeddings[0]})
+    text = tokenizer([ req["content"] ])
+
+    with torch.no_grad(), torch.autocast("cuda"):
+        text_features = model.encode_text(text)
+        embeddings = text_features.tolist()
+        return jsonify({"embedding": embeddings[0]})
 
 @app.route("/embeddings/image", methods=['POST'])
 def embeddings_image():
-
+    
     req = request.json
     body = base64.b64decode(req["image_data"][0]["data"])
 
@@ -182,9 +201,12 @@ def embeddings_image():
         wr.write(body)
         wr.close()
 
-        embeddings = clip_embd.embed_image([wr.name])
+        image = preprocess(Image.open(wr.name)).unsqueeze(0)
         os.remove(wr.name)
-
-        return jsonify({"embedding": embeddings[0]})
+        
+        with torch.no_grad(), torch.autocast("cuda"):
+            image_features = model.encode_image(image)
+            embeddings = image_features.tolist()
+            return jsonify({"embedding": embeddings[0]})
 
 */
