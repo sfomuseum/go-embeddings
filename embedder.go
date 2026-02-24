@@ -51,11 +51,49 @@ func ensureEmbedderRoster() error {
 	return nil
 }
 
-// NewEmbedder returns a new `Embedder` instance configured by 'uri'. The value of 'uri' is parsed
+func NewEmbedder64(ctx context.Context, uri string) (Embedder[float64], error) {
+
+	uri, err := ensureSuffix(uri, "64")
+
+	if err != nil {
+		return nil, err
+	}
+
+	return newEmbedder[float64](ctx, uri)
+}
+
+func NewEmbedder32(ctx context.Context, uri string) (Embedder[float32], error) {
+
+	uri, err := ensureSuffix(uri, "32")
+
+	if err != nil {
+		return nil, err
+	}
+
+	return newEmbedder[float32](ctx, uri)
+}
+
+func ensureSuffix(uri string, suffix string) (string, error) {
+
+	u, err := url.Parse(uri)
+
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasSuffix(u.Scheme, suffix) {
+		u.Scheme = fmt.Sprintf("%s%s", u.Scheme, suffix)
+		uri = u.String()
+	}
+
+	return uri, nil
+}
+
+// newEmbedder returns a new `Embedder` instance configured by 'uri'. The value of 'uri' is parsed
 // as a `url.URL` and its scheme is used as the key for a corresponding `EmbedderInitializationFunc`
 // function used to instantiate the new `Embedder`. It is assumed that the scheme (and initialization
 // function) have been registered by the `RegisterEmbedder` method.
-func NewEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
+func newEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 

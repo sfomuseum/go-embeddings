@@ -11,7 +11,7 @@ func TestNullEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "null://")
+	emb, err := NewEmbedder32(ctx, "null://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -21,13 +21,13 @@ func TestNullEmbeddings(t *testing.T) {
 		Body: []byte("Hello world"),
 	}
 
-	rsp, err := emb.Embeddings(ctx, req)
+	rsp, err := emb.TextEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp.Embeddings) != 0 {
+	if len(rsp.Embeddings()) != 0 {
 		t.Fatalf("Unexpected embedding")
 	}
 }
@@ -36,7 +36,7 @@ func TestNullImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "null://")
+	emb, err := NewEmbedder64(ctx, "null://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -68,7 +68,7 @@ func TestNullImageEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp.Embeddings) != 0 {
+	if len(rsp.Embeddings()) != 0 {
 		t.Fatalf("Unexpected embedding")
 	}
 }

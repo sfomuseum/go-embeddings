@@ -34,3 +34,19 @@ func AsFloat64(data []float32) []float64 {
 
 	return e64
 }
+
+func toFloat64Slice[T Float](src []float64) []T {
+	dst := make([]T, len(src))
+	for i, v := range src {
+		dst[i] = T(v) // float64 → T (float32 or float64)
+	}
+	return dst
+}
+
+func toFloat32Slice[T Float](src []float32) []T {
+	dst := make([]T, len(src))
+	for i, v := range src {
+		dst[i] = T(v) // float32 → T (float32 or float64)
+	}
+	return dst
+}

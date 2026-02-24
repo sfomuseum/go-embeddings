@@ -24,7 +24,7 @@ func main() {
 
 	ctx := context.Background()
 
-	cl, err := embeddings.NewEmbedder(ctx, client_uri)
+	cl, err := embeddings.NewEmbedder32(ctx, client_uri)
 
 	if err != nil {
 		log.Fatal(err)
@@ -85,6 +85,8 @@ func main() {
 		}
 
 		embeddings_rsp, embeddings_err = cl.ImageEmbeddings(ctx, req)
+	default:
+		log.Fatal("Invalid or unsuported action")
 	}
 
 	if embeddings_err != nil {

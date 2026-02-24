@@ -7,7 +7,7 @@ type EmbeddingsResponse[T Float] interface {
 	Model() string
 	Embeddings() []T
 	Dimensions() int32
-	Precision() uint8
+	Precision() string
 	Created() int64
 }
 
@@ -17,7 +17,7 @@ type CommonEmbeddingsResponse[T Float] struct {
 	CommonEmbeddings      []T    `json:"embeddings"`
 	CommonModel           string `json:"model"`
 	CommonCreated         int64  `json:"created"`
-	CommonPrecision       uint8  `json:"precision"`
+	CommonPrecision       string `json:"precision"`
 }
 
 func (r *CommonEmbeddingsResponse[T]) Id() string {
@@ -32,7 +32,7 @@ func (r *CommonEmbeddingsResponse[T]) Created() int64 {
 	return r.CommonCreated
 }
 
-func (r *CommonEmbeddingsResponse[T]) Precision() uint8 {
+func (r *CommonEmbeddingsResponse[T]) Precision() string {
 	return r.CommonPrecision
 }
 
