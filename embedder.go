@@ -11,20 +11,20 @@ import (
 )
 
 // Embedder defines an interface for generating (vector) embeddings
-type Embedder interface {
-	TextEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse, error)
-	ImageEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse, error)
+type Embedder[T Float] interface {
+	TextEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
+	ImageEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
 }
 
 // EmbedderInitializationFunc is a function defined by individual embedder package and used to create
 // an instance of that embedder
-type EmbedderInitializationFunc func(ctx context.Context, uri string) (Embedder, error)
+type EmbedderInitializationFunc[T Float] func(ctx context.Context, uri string) (Embedder[T], error)
 
 var embedder_roster roster.Roster
 
 // RegisterEmbedder registers 'scheme' as a key pointing to 'init_func' in an internal lookup table
 // used to create new `Embedder` instances by the `NewEmbedder` method.
-func RegisterEmbedder(ctx context.Context, scheme string, init_func EmbedderInitializationFunc) error {
+func RegisterEmbedder[T Float](ctx context.Context, scheme string, init_func EmbedderInitializationFunc[T]) error {
 
 	err := ensureEmbedderRoster()
 
@@ -55,7 +55,7 @@ func ensureEmbedderRoster() error {
 // as a `url.URL` and its scheme is used as the key for a corresponding `EmbedderInitializationFunc`
 // function used to instantiate the new `Embedder`. It is assumed that the scheme (and initialization
 // function) have been registered by the `RegisterEmbedder` method.
-func NewEmbedder(ctx context.Context, uri string) (Embedder, error) {
+func NewEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -71,7 +71,7 @@ func NewEmbedder(ctx context.Context, uri string) (Embedder, error) {
 		return nil, err
 	}
 
-	init_func := i.(EmbedderInitializationFunc)
+	init_func := i.(EmbedderInitializationFunc[T])
 	return init_func(ctx, uri)
 }
 

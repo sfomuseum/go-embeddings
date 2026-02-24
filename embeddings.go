@@ -1,7 +1,5 @@
 package embeddings
 
-type Float interface{ ~float32 | ~float64 }
-
 type EmbeddingsPrecision uint8
 
 const (

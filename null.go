@@ -6,44 +6,45 @@ import (
 )
 
 // NullEmbedder implements the `Embedder` interface using an Null API endpoint to derive embeddings.
-type NullEmbedder struct {
-	Embedder
+type NullEmbedder[T Float] struct {
+	Embedder[T]
 }
 
 func init() {
 	ctx := context.Background()
-	err := RegisterEmbedder(ctx, "null", NewNullEmbedder)
+
+	err := RegisterEmbedder(ctx, "null", NewNullEmbedder[float64])
 
 	if err != nil {
 		panic(err)
 	}
 }
 
-func NewNullEmbedder(ctx context.Context, uri string) (Embedder, error) {
+func NewNullEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
-	e := &NullEmbedder{}
+	e := &NullEmbedder[T]{}
 	return e, nil
 }
 
-func (e *NullEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+func (e *NullEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 	return e.nullEmbeddings(ctx, req)
 }
 
-func (e *NullEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+func (e *NullEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 	return e.nullEmbeddings(ctx, req)
 }
 
-func (e *NullEmbedder) nullEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+func (e *NullEmbedder[T]) nullEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	now := time.Now()
 	ts := now.Unix()
 
-	rsp := &CommonEmbeddingsResponse{
-		CommonId:           req.Id,
-		CommonEmbeddings64: make([]float64, 0),
-		CommonModel:        "null",
-		CommonCreated:      ts,
-		CommonPrecision:    64,
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:         req.Id,
+		CommonEmbeddings: make([]T, 0),
+		CommonModel:      "null",
+		CommonCreated:    ts,
+		CommonPrecision:  64,
 	}
 
 	return rsp, nil
