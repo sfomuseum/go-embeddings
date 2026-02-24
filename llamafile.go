@@ -2,21 +2,18 @@
 
 package embeddings
 
+// Note that newer versions of llamafile no longer generate embeddings. See llamafiler.go or encoderfile.go
+
 // https://github.com/Mozilla-Ocho/llamafile/blob/main/llama.cpp/server/README.md#api-endpoints
 // https://github.com/Mozilla-Ocho/llamafile?tab=readme-ov-file#other-example-llamafiles
 //
 // curl --request POST --url http://localhost:8080/embedding --header "Content-Type: application/json" --data '{"content": "Hello world" }'
 
 import (
-	_ "bytes"
 	"context"
 	"encoding/base64"
-	_ "encoding/json"
 	"fmt"
-	_ "io"
-	_ "net/http"
 	"net/url"
-	_ "strconv"
 	"strings"
 	"time"
 )

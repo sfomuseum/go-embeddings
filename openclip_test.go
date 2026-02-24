@@ -13,7 +13,7 @@ func TestOpenCLIPEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "openclip://")
+	emb, err := NewEmbedder32(ctx, "openclip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -23,13 +23,13 @@ func TestOpenCLIPEmbeddings(t *testing.T) {
 		Body: []byte("Hello world"),
 	}
 
-	rsp, err := emb.Embeddings(ctx, req)
+	rsp, err := emb.TextEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp.Embeddings) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }
@@ -38,7 +38,7 @@ func TestOpenCLIPImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "openclip://")
+	emb, err := NewEmbedder32(ctx, "openclip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -70,7 +70,7 @@ func TestOpenCLIPImageEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp.Embeddings) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }

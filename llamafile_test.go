@@ -44,7 +44,7 @@ func TestLlamafileImageEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
-	im_path := "../fixtures/1527845303_walrus.jpg"
+	im_path := "fixtures/1527845303_walrus.jpg"
 
 	im_r, err := os.Open(im_path)
 
@@ -60,11 +60,11 @@ func TestLlamafileImageEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to read data from %s, %v", im_path, err)
 	}
 
-	res := &EmbeddingsRequest{
+	req := &EmbeddingsRequest{
 		Body: im_body,
 	}
 
-	rsp, err := emb.ImageEmbeddings(ctx, im_body)
+	rsp, err := emb.ImageEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
