@@ -19,13 +19,17 @@ func TestLlamafileEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
-	rsp, err := emb.Embeddings(ctx, "Hello world")
+	res := &EmbeddingsRequest{
+		Body: []byte("Hello world"),
+	}
+
+	rsp, err := emb.Embeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp) == 0 {
+	if len(rsp.Embeddings) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }
@@ -56,13 +60,17 @@ func TestLlamafileImageEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to read data from %s, %v", im_path, err)
 	}
 
+	res := &EmbeddingsRequest{
+		Body: im_body,
+	}
+
 	rsp, err := emb.ImageEmbeddings(ctx, im_body)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp) == 0 {
+	if len(rsp.Embeddings) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }

@@ -9,6 +9,7 @@ package embeddings
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"github.com/sfomuseum/go-encoderfile/client"
 	"github.com/sfomuseum/go-encoderfile/embeddings"
@@ -57,20 +58,32 @@ func NewEncoderfileEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *EncoderfileEmbedder) Embeddings(ctx context.Context, content string) ([]float64, error) {
+func (e *EncoderfileEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
-	e32, err := e.Embeddings32(ctx, content)
+	rsp32, err := e.Embeddings32(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return AsFloat64(e32), nil
+	e64 := AsFloat64(rsp32.Embeddings)
+
+	rsp64 := &EmbeddingsResponse{
+		Id:         rsp32.Model,
+		Embeddings: e64,
+		Dimensions: rsp32.Dimensions,
+		Model:      rsp32.Model,
+		Created:    rsp32.Created,
+	}
+
+	return rsp64, nil
 }
 
-func (e *EncoderfileEmbedder) Embeddings32(ctx context.Context, content string) ([]float32, error) {
+func (e *EncoderfileEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) ([]float32, error) {
 
-	input := []string{content}
+	input := []string{
+		string(req.Body),
+	}
 
 	rsp, err := e.client.Embeddings(ctx, input, e.normalize)
 
@@ -84,15 +97,28 @@ func (e *EncoderfileEmbedder) Embeddings32(ctx context.Context, content string) 
 		return nil, err
 	}
 
-	return pooled.Embeddings, nil
+	e32 := pooled.Embeddings
+
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp32 := &EmbeddingsResponse32{
+		Id:         req.Id,
+		Embeddings: e32,
+		Dimensions: len(e32[0]),
+		Model:      "fixme",
+		Created:    ts,
+	}
+
+	return rsp32, nil
 }
 
-func (e *EncoderfileEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
+func (e *EncoderfileEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
 	return nil, NotImplemented
 }
 
-func (e *EncoderfileEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]float32, error) {
+func (e *EncoderfileEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
 	return nil, NotImplemented
 }

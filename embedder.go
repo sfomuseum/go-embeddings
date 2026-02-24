@@ -1,7 +1,5 @@
 package embeddings
 
-// https://github.com/asg017/sqlite-vss
-
 import (
 	"context"
 	"fmt"
@@ -12,16 +10,38 @@ import (
 	"github.com/aaronland/go-roster"
 )
 
+type EmbeddingsRequest struct {
+	Id    string `json:"id,omitempty"`
+	Model string `json:"model"`
+	Body  []byte `json:"body"`
+}
+
+type EmbeddingsResponse struct {
+	Id         string    `json:"id,omitempty"`
+	Embeddings []float64 `json:"embeddings"`
+	Dimensions int32     `json:"dimensions"`
+	Model      string    `json:"model"`
+	Created    int64     `json:"created"`
+}
+
+type EmbeddingsResponse32 struct {
+	Id         string    `json:"id,omitempty"`
+	Embeddings []float32 `json:"embeddings"`
+	Dimensions int32     `json:"dimensions"`
+	Model      string    `json:"model"`
+	Created    int64     `json:"created"`
+}
+
 // Embedder defines an interface for generating (vector) embeddings
 type Embedder interface {
-	// Embeddings returns the embeddings for a string as a list of float64 values.
-	Embeddings(context.Context, string) ([]float64, error)
-	// Embeddings32 returns the embeddings for a string as a list of float32 values.
-	Embeddings32(context.Context, string) ([]float32, error)
-	// ImageEmbeddings returns the embeddings for a base64-encoded image as a list of float64 values.
-	ImageEmbeddings(context.Context, []byte) ([]float64, error)
-	// ImageEmbeddings32 returns the embeddings for a base64-encoded image as a list of float32 values.
-	ImageEmbeddings32(context.Context, []byte) ([]float32, error)
+	// Embeddings returns ...
+	Embeddings(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse, error)
+	// Embeddings32 returns ...
+	Embeddings32(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse32, error)
+	// ImageEmbeddings returns ...
+	ImageEmbeddings(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse, error)
+	// ImageEmbeddings32 returns ...
+	ImageEmbeddings32(context.Context, *EmbeddingsRequest) (*EmbeddingsResponse32, error)
 }
 
 // EmbedderInitializationFunc is a function defined by individual embedder package and used to create

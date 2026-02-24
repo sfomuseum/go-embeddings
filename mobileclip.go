@@ -56,56 +56,76 @@ func NewMobileCLIPEmbedder(ctx context.Context, uri string) (Embedder, error) {
 	return e, nil
 }
 
-func (e *MobileCLIPEmbedder) Embeddings(ctx context.Context, content string) ([]float64, error) {
+func (e *MobileCLIPEmbedder) Embeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
-	e32, err := e.Embeddings32(ctx, content)
+	rsp32, err := e.Embeddings32(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return AsFloat64(e32), nil
+	return EmbeddingsResponse32AsEmbeddingsResponse(rsp32)
 }
 
-func (e *MobileCLIPEmbedder) Embeddings32(ctx context.Context, content string) ([]float32, error) {
+func (e *MobileCLIPEmbedder) Embeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
-	req := &mobileclip.EmbeddingsRequest{
+	mc_req := &mobileclip.EmbeddingsRequest{
 		Model: e.model,
-		Body:  []byte(content),
+		Body:  req.Body,
 	}
 
-	rsp, err := e.client.ComputeTextEmbeddings(ctx, req)
+	mc_rsp, err := e.client.ComputeTextEmbeddings(ctx, mc_req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings, nil
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp32 := &EmbeddingsResponse32{
+		Id:         req.Id,
+		Embeddings: mc_rsp.Embeddings,
+		Model:      e.model,
+		Created:    ts,
+	}
+
+	return rsp32, nil
 }
 
-func (e *MobileCLIPEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
+func (e *MobileCLIPEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse, error) {
 
-	e32, err := e.ImageEmbeddings32(ctx, data)
+	rsp32, err := e.ImageEmbeddings32(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return AsFloat64(e32), nil
+	return EmbeddingsResponse32AsEmbeddingsResponse(rsp32)
 }
 
-func (e *MobileCLIPEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]float32, error) {
+func (e *MobileCLIPEmbedder) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (*EmbeddingsResponse32, error) {
 
-	req := &mobileclip.EmbeddingsRequest{
+	mc_req := &mobileclip.EmbeddingsRequest{
 		Model: e.model,
-		Body:  data,
+		Body:  req.Body,
 	}
 
-	rsp, err := e.client.ComputeImageEmbeddings(ctx, req)
+	mc_rsp, err := e.client.ComputeImageEmbeddings(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings, nil
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp32 := &EmbeddingsResponse32{
+		Id:         req.Id,
+		Embeddings: mc_rsp.Embeddings,
+		Model:      e.model,
+		Created:    ts,
+	}
+
+	return rsp32, nil
 }
