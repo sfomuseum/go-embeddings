@@ -43,7 +43,7 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 	precision := "float32"
 
 	if strings.HasSuffix(u.Scheme, "64") {
-		precision = fmt.Sprintf("%s#as%d", precision, 64)
+		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
 	}
 
 	e := &MLXClipEmbedder[T]{

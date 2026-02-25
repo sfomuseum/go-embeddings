@@ -56,7 +56,7 @@ func NewEncoderfileEmbedder[T Float](ctx context.Context, uri string) (Embedder[
 	precision := "float32"
 
 	if strings.HasSuffix(u.Scheme, "64") {
-		precision = fmt.Sprintf("%s#as%d", precision, 64)
+		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
 	}
 
 	e := &EncoderfileEmbedder[T]{

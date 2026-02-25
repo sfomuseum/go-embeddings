@@ -34,7 +34,7 @@ func NewNullEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 
 	switch {
 	case strings.HasSuffix(u.Scheme, "64"):
-		precision = "%s#as64"
+		precision = "%s#as-float64"
 	}
 
 	e := &NullEmbedder[T]{

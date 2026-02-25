@@ -55,7 +55,7 @@ func NewLlamafileEmbedder[T Float](ctx context.Context, uri string) (Embedder[T]
 	precision := "float64"
 
 	if strings.HasSuffix(u.Scheme, "32") {
-		precision = fmt.Sprintf("%s#as%d", precision, 32)
+		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
 	}
 
 	e := &LlamafileEmbedder[T]{
