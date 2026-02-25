@@ -174,6 +174,8 @@ encoderfile://?{PARAMETERS}
 | --- | --- | --- | --- |
 | client-uri | string | no | The URI for the `embedderfile` HTTP server endpoint. Default is `http://localhost:8080`. The gRPC server endpoint provided by `encoderfile` is not supported yet. |
 
+#### See also
+
 * https://www.mozilla.ai/open-tools/encoderfile
 * https://github.com/sfomuseum/go-encoderfile
 
@@ -189,11 +191,13 @@ llamafile://?{PARAMETERS}
 | --- | --- | --- | --- |
 | client-uri | string | no | The URI for the `llamafile` HTTP server endpoint. Default is `http://localhost:8080`. |
 
+#### See also
+
 * https://github.com/mozilla-ai/llamafile/
 
 ### mlxclip://
 
-Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library.
+Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library which emits JSON-encoded embeddings to STDOUT.
 
 The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
 
@@ -201,7 +205,14 @@ The option requires a device using an Apple Silicon chip and involves a non-zero
 mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}
 ```
 
+#### Set up
+
+As of this writing I am not sure I have working set up instructions. Specifically you want something like the include code in the [mlxclip_py.txt](mlxclip_py.txt) file which in turn loads the [mlx_clip](https://github.com/harperreed/mlx_clip) library. Nothing fancy but since first getting this to work something has changed (?) that prevents Python from importing the `mlx_clip` package. This remains to be resolved.
+
+#### See also
+
 * https://github.com/harperreed/mlx_clip
+* https://github.com/ml-explore/mlx-examples/tree/main/clip
 
 ### mobileclip://
 
@@ -215,6 +226,8 @@ mobileclip://?{PARAMETERS}
 | --- | --- | --- | --- |
 | client-uri | string | yes | The URI for the `swift-mobileclip` gRPC server endpoint. Default is `grpc://localhosr:8080`. |
 | model | string | yes | The URI of the model to use for generating embeddings. |
+
+#### See also
 
 * https://github.com/apple/ml-mobileclip
 * https://github.com/sfomuseum/swift-mobileclip
@@ -241,6 +254,8 @@ ollama://?{PARAMETERS}
 | client-uri | string | no | Default is `http://localhost:11434`. |
 | model | string | yes | The name of the model to use for generating embeddings. |
 
+#### See also
+
 * https://ollama.com/
 * https://docs.ollama.com/api/introduction
 
@@ -258,9 +273,9 @@ openclip://?{PARAMETERS}
 | --- | --- | --- | --- |
 | client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:8080`. |
 
-* https://github.com/mlfoundations/open_clip
-
 #### Set up
+
+Using this implementation requires running a HTTP service exposing the OpenCLIP functionality. The easiest way to do that is in a Python "virtual environment" configured as follows:
 
 ```
 $> python -m venv openclip
@@ -271,11 +286,20 @@ $> bin/pip install open_clip_torch
 $> bin/pip install Pillow
 ```
 
-Then, copy the code in [openclip_server.txt](openclip_server.txt) in to a file called openclip_server.py and launch it as follows:
+Then, copy the included code in [openclip_server.txt](openclip_server.txt) in to a file called openclip_server.py and launch it as follows:
 
 ```
 $> bin/flask --app openclip_server run
+ * Serving Flask app 'openclip_server'
+ * Debug mode: off
+INFO:werkzeug:WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+INFO:werkzeug:Press CTRL+C to quit
 ```
+
+#### See also
+
+* https://github.com/mlfoundations/open_clip
 
 ## Tests
 
