@@ -1,0 +1,45 @@
+import tempfile
+import base64
+import os
+
+from flask import Flask, request, jsonify
+import torch
+from PIL import Image
+import open_clip
+
+model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+model.eval()
+
+tokenizer = open_clip.get_tokenizer('ViT-B-32')
+
+app = Flask(__name__)
+
+@app.route("/embeddings", methods=['POST'])
+def embeddings():
+
+    req = request.json
+    text = tokenizer([ req["content"] ])
+
+    with torch.no_grad(), torch.autocast("cuda"):
+        text_features = model.encode_text(text)
+        embeddings = text_features.tolist()
+        return jsonify({"embedding": embeddings[0]})
+
+@app.route("/embeddings/image", methods=['POST'])
+def embeddings_image():
+
+    req = request.json
+    body = base64.b64decode(req["image_data"][0]["data"])
+
+    with tempfile.NamedTemporaryFile(delete_on_close=False, mode="wb") as wr:
+
+        wr.write(body)
+        wr.close()
+
+        image = preprocess(Image.open(wr.name)).unsqueeze(0)
+        os.remove(wr.name)
+
+        with torch.no_grad(), torch.autocast("cuda"):
+            image_features = model.encode_image(image)
+            embeddings = image_features.tolist()
+            return jsonify({"embedding": embeddings[0]})

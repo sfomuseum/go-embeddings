@@ -1,5 +1,3 @@
-//go:build openclip
-
 package embeddings
 
 import (

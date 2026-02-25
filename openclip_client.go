@@ -1,5 +1,3 @@
-//go:build openclip
-
 package embeddings
 
 import (
@@ -181,7 +179,7 @@ app = Flask(__name__)
 
 @app.route("/embeddings", methods=['POST'])
 def embeddings():
-    
+
     req = request.json
     text = tokenizer([ req["content"] ])
 
@@ -192,7 +190,7 @@ def embeddings():
 
 @app.route("/embeddings/image", methods=['POST'])
 def embeddings_image():
-    
+
     req = request.json
     body = base64.b64decode(req["image_data"][0]["data"])
 
@@ -203,7 +201,7 @@ def embeddings_image():
 
         image = preprocess(Image.open(wr.name)).unsqueeze(0)
         os.remove(wr.name)
-        
+
         with torch.no_grad(), torch.autocast("cuda"):
             image_features = model.encode_image(image)
             embeddings = image_features.tolist()

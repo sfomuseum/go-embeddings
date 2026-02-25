@@ -1,8 +1,6 @@
-//go:build llamafile
-
 package embeddings
 
-// Note that newer versions of llamafile no longer generate embeddings. See llamafiler.go or encoderfile.go
+// Note that newer versions of llamafile no longer generate embeddings. See encoderfile.go
 
 // https://github.com/Mozilla-Ocho/llamafile/blob/main/llama.cpp/server/README.md#api-endpoints
 // https://github.com/Mozilla-Ocho/llamafile?tab=readme-ov-file#other-example-llamafiles

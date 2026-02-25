@@ -59,7 +59,7 @@ func NewEmbedder64(ctx context.Context, uri string) (Embedder[float64], error) {
 		return nil, err
 	}
 
-	return newEmbedder[float64](ctx, uri)
+	return NewEmbedder[float64](ctx, uri)
 }
 
 func NewEmbedder32(ctx context.Context, uri string) (Embedder[float32], error) {
@@ -70,7 +70,7 @@ func NewEmbedder32(ctx context.Context, uri string) (Embedder[float32], error) {
 		return nil, err
 	}
 
-	return newEmbedder[float32](ctx, uri)
+	return NewEmbedder[float32](ctx, uri)
 }
 
 func ensureSuffix(uri string, suffix string) (string, error) {
@@ -93,7 +93,7 @@ func ensureSuffix(uri string, suffix string) (string, error) {
 // as a `url.URL` and its scheme is used as the key for a corresponding `EmbedderInitializationFunc`
 // function used to instantiate the new `Embedder`. It is assumed that the scheme (and initialization
 // function) have been registered by the `RegisterEmbedder` method.
-func newEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
+func NewEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 

@@ -1,5 +1,3 @@
-//go:build encoderfile
-
 package embeddings
 
 // go run -mod vendor -tags encoderfile cmd/embeddings/main.go -client-uri 'encoderfile://?client-uri=http://localhost:8080' text ./README.md
@@ -8,7 +6,9 @@ package embeddings
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/sfomuseum/go-encoderfile/client"
@@ -16,23 +16,22 @@ import (
 )
 
 // EncoderfileEmbedder implements the `Embedder` interface using an Encoderfile API endpoint to derive embeddings.
-type EncoderfileEmbedder struct {
-	Embedder
+type EncoderfileEmbedder[T Float] struct {
+	Embedder[T]
 
 	client    client.Client
+	precision string
 	normalize bool
 }
 
 func init() {
 	ctx := context.Background()
-	err := RegisterEmbedder(ctx, "encoderfile", NewEncoderfileEmbedder)
-
-	if err != nil {
-		panic(err)
-	}
+	RegisterEmbedder[float32](ctx, "encoderfile", NewEncoderfileEmbedder)
+	RegisterEmbedder[float32](ctx, "encoderfile32", NewEncoderfileEmbedder)
+	RegisterEmbedder[float64](ctx, "encoderfile64", NewEncoderfileEmbedder)
 }
 
-func NewEncoderfileEmbedder(ctx context.Context, uri string) (Embedder, error) {
+func NewEncoderfileEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -50,15 +49,22 @@ func NewEncoderfileEmbedder(ctx context.Context, uri string) (Embedder, error) {
 		return nil, err
 	}
 
-	e := &EncoderfileEmbedder{
+	precision := "32"
+
+	if strings.HasSuffix(u.Scheme, "64") {
+		precision = fmt.Sprintf("%s#%d", precision, 64)
+	}
+
+	e := &EncoderfileEmbedder[T]{
 		client:    cl,
 		normalize: true,
+		precision: precision,
 	}
 
 	return e, nil
 }
 
-func (e *EncoderfileEmbedder) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+func (e *EncoderfileEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	input := []string{
 		string(req.Body),
@@ -81,17 +87,23 @@ func (e *EncoderfileEmbedder) TextEmbeddings(ctx context.Context, req *Embedding
 	now := time.Now()
 	ts := now.Unix()
 
-	rsp := &CommonEmbeddingsResponse{
-		Id:           req.Id,
-		Embeddings32: e32,
-		Precision:    32,
-		Model:        "fixme",
-		Created:      ts,
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonPrecision: e.precision,
+		CommonModel:     "fixme",
+		CommonCreated:   ts,
+	}
+
+	switch {
+	case strings.HasSuffix(e.precision, "64"):
+		rsp.CommonEmbeddings = toFloat64Slice[T](AsFloat64(e32))
+	default:
+		rsp.CommonEmbeddings = toFloat32Slice[T](e32)
 	}
 
 	return rsp, nil
 }
 
-func (e *EncoderfileEmbedder) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse, error) {
+func (e *EncoderfileEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 	return nil, NotImplemented
 }

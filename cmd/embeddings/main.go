@@ -15,8 +15,10 @@ import (
 func main() {
 
 	var client_uri string
+	// var precision int
 
-	flag.StringVar(&client_uri, "client-uri", "", "...")
+	flag.StringVar(&client_uri, "client-uri", "null://", "...")
+	// flag.IntVar(&precision, "precision", 32, "...")
 
 	flag.Parse()
 

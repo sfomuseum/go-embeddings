@@ -1,5 +1,3 @@
-//go:build ollama
-
 package embeddings
 
 import (

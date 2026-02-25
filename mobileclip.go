@@ -1,5 +1,3 @@
-//go:build mobileclip
-
 package embeddings
 
 // go run -mod vendor -tags mobileclip cmd/embeddings/main.go -client-uri 'mobileclip://?client-uri=grpc://localhost:8080&model=s0' text hello world
