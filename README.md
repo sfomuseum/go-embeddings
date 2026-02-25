@@ -108,7 +108,7 @@ type EmbeddingsRequest struct {
 }
 ```
 
-As mentioned both methods return an `EmbeddingsResponse[T]` instance. The default implementation of the `EmbeddingsResponse[T]` interface used by this package is the `CommonEmbeddingsResponse` type. See [response.go](response.go) for details.
+As mentioned both methods return an `EmbeddingsResponse[T]` instance. The default implementation of the `EmbeddingsResponse[T]` interface used by this package is the `CommonEmbeddingsResponse` type. See [response_common.go](response_common.go) for details.
 
 ## Example
 
