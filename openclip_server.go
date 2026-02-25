@@ -1,3 +1,5 @@
+//go:build openclip_server
+
 package embeddings
 
 import (
@@ -10,4 +12,4 @@ var f embed.FS
 
 func StartOpenCLIPServer(ctx context.Context) error {
 	return NotImplemented
-}	
+}

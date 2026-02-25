@@ -1,5 +1,7 @@
 package embeddings
 
+// https://github.com/mlfoundations/open_clip
+
 import (
 	"context"
 	"encoding/base64"
