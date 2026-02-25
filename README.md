@@ -2,6 +2,10 @@
 
 Go package defining a common interface for generating text and image embeddings.
 
+## Documentation
+
+`godoc` is currently incomplete.
+
 ## Design
 
 To account for the fact that most embeddings models still return `float32` vector data but an increasing number of models are starting to return `float64` vectors this package wraps both options in a `Float` interface.
@@ -37,7 +41,7 @@ This means that you need to specify the float type you want the interface to ret
 ```
 ctx := context.Backgroud()
 
-uri32 := "ollama://"
+uri32 := "ollama://?model=embeddinggemma"
 uri64 := "encoderfile://"
 
 cl, _ := embeddings.NewEmbedder[float32](ctx, uri32)
@@ -49,14 +53,14 @@ There are also handy `NewEmbedder32` and `NewEmbedder64` methods which are littl
 ```
 ctx := context.Backgroud()
 
-uri32 := "ollama://"
+uri32 := "ollama://?model=embeddinggemma"
 uri64 := "encoderfile://"
 
 cl, _ := embeddings.NewEmbedder32(ctx, uri32)
 cl, _ := embeddings.NewEmbedder64(ctx, uri64)
 ```
 
-The `NewEmbedder`, `NewEmbedder32` and `NewEmbedder64` all have the same signature: A `context.Context` instance and a URI string used to configure and instantiate the underlying embeddings provider implementation.
+The `NewEmbedder`, `NewEmbedder32` and `NewEmbedder64` all have the same signature: A `context.Context` instance and a URI string used to configure and instantiate the underlying embeddings provider implementation. These are discussed in detail below.
 
 Both the `TextEmbeddings` and `ImageEmbeddings` methods take the same input, a `EmbeddingsRequest` struct:
 
