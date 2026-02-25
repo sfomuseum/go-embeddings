@@ -164,18 +164,22 @@ Which would return the following:
 
 ### encoderfile://
 
+Derive vector embeddings from an instance of the Mozilla [embedderfile](https://www.mozilla.ai/open-tools/encoderfile) application, running as an HTTP server.
+
 ```
 encoderfile://?{PARAMETERS}
 ```
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | no | Default is `http://localhost:8080`. |
+| client-uri | string | no | Default is `http://localhost:8080`. The gRPC endpoint provided by `encoderfile` is not supported yet. |
 
 * https://www.mozilla.ai/open-tools/encoderfile
 * https://github.com/sfomuseum/go-encoderfile
 
 ### llamafile://
+
+Derive vector embedding from an instance of the Mozilla [llamafile](#) application. Note that newer versions of `llamafile` not longer expose an interface for deriving embeddings so this implementation will only work with older builds. See the `encoderfile://` implementation for an alternative.
 
 ```
 llamafile://?{PARAMETERS}
@@ -185,7 +189,11 @@ llamafile://?{PARAMETERS}
 | --- | --- | --- | --- |
 | client-uri | string | no | Default is `http://localhost:8080`. |
 
+* https://github.com/mozilla-ai/llamafile/
+
 ### mlxclip://
+
+Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library.
 
 ```
 mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}
@@ -202,7 +210,7 @@ mobileclip://?{PARAMETERS}
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
 | client-uri | string | yes | ... |
-| model | string | yes | ... |
+| model | string | yes | The URI of the model to use for generating embeddings. |
 
 * https://github.com/apple/ml-mobileclip
 * https://github.com/sfomuseum/swift-mobileclip
@@ -223,6 +231,10 @@ ollama://?{PARAMETERS}
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
 | client-uri | string | no | Default is `http://localhost:11434`. |
+| model | string | yes | The name of the model to use for generating embeddings. |
+
+* https://ollama.com/
+* https://docs.ollama.com/api/introduction
 
 ### openclip://
 
@@ -233,6 +245,8 @@ openclip://?{PARAMETERS}
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
 | client-uri | string | no | Default is `http://localhost:8080`. |
+
+* https://github.com/mlfoundations/open_clip
 
 ## Tests
 
