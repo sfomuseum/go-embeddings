@@ -6,6 +6,42 @@ Go package defining a common interface for generating text and image embeddings.
 
 `godoc` is currently incomplete.
 
+## Motivation
+
+This is a simple abstraction library, written in Go, around a variety of services which produce vector embeddings. There are many such libraries and this one is ours. It tries to be the "simplest dumbest" thing for the most common operations and data needs. These ideas are encapsulated in the `EmbeddingsRequest` and `EmbeddingsResponse` types.
+
+```
+type EmbeddingsRequest struct {
+	Id    string `json:"id,omitempty"`
+	Model string `json:"model"`
+	Body  []byte `json:"body"`
+}
+
+type EmbeddingsResponse[T Float] interface {
+	Id() string
+	Model() string
+	Embeddings() []T
+	Dimensions() int32
+	Precision() string
+	Created() int64
+}
+```
+
+The default implementation of the `EmbeddingsResponse` interface is the `CommonEmbeddingsResponse` type:
+
+```
+type CommonEmbeddingsResponse[T Float] struct {
+	EmbeddingsResponse[T] `json:",omitempty"`
+	CommonId              string `json:"id,omitempty"`
+	CommonEmbeddings      []T    `json:"embeddings"`
+	CommonModel           string `json:"model"`
+	CommonCreated         int64  `json:"created"`
+	CommonPrecision       string `json:"precision"`
+}
+```
+
+While not specific to SFO Museum this package is targeted at the kinds of things SFO Museum needs to today meaning it may be lacking features you need or want. 
+
 ## Design
 
 To account for the fact that most embeddings models still return `float32` vector data but an increasing number of models return `float64` vectors this package wraps both options in a `Float` interface.
@@ -136,6 +172,9 @@ encoderfile://?{PARAMETERS}
 | --- | --- | --- | --- |
 | client-uri | string | no | Default is `http://localhost:8080`. |
 
+* https://www.mozilla.ai/open-tools/encoderfile
+* https://github.com/sfomuseum/go-encoderfile
+
 ### llamafile://
 
 ```
@@ -152,6 +191,8 @@ llamafile://?{PARAMETERS}
 mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}
 ```
 
+* https://github.com/harperreed/mlx_clip
+
 ### mobileclip://
 
 ```
@@ -162,6 +203,10 @@ mobileclip://?{PARAMETERS}
 | --- | --- | --- | --- |
 | client-uri | string | yes | ... |
 | model | string | yes | ... |
+
+* https://github.com/apple/ml-mobileclip
+* https://github.com/sfomuseum/swift-mobileclip
+* https://github.com/sfomuseum/go-mobileclip
 
 ### null://
 
