@@ -8,7 +8,7 @@ Go package defining a common interface for generating text and image embeddings.
 
 ## Design
 
-To account for the fact that most embeddings models still return `float32` vector data but an increasing number of models are starting to return `float64` vectors this package wraps both options in a `Float` interface.
+To account for the fact that most embeddings models still return `float32` vector data but an increasing number of models return `float64` vectors this package wraps both options in a `Float` interface.
 
 ```
 type Float interface{ ~float32 | ~float64 }
@@ -120,6 +120,10 @@ Which would return the following:
 }
 ```
 
+## Precision
+
+...
+
 ## Implementations
 
 ### encoderfile://
@@ -184,3 +188,6 @@ openclip://?{PARAMETERS}
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
 | client-uri | string | no | Default is `http://localhost:8080`. |
+
+## Tests
+

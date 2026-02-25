@@ -1,17 +1,5 @@
 package embeddings
 
-type EmbeddingsPrecision uint8
-
-const (
-	_         EmbeddingsPrecision = iota
-	Micro                         // 4
-	Mini                          // 8
-	Half                          // 16
-	Single                        // 32
-	Double                        // 64
-	Quadruple                     // 128
-)
-
 func AsFloat32(data []float64) []float32 {
 
 	e32 := make([]float32, len(data))
