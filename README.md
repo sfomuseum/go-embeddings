@@ -164,7 +164,7 @@ Which would return the following:
 
 ### encoderfile://
 
-Derive vector embeddings from an instance of the Mozilla [embedderfile](https://www.mozilla.ai/open-tools/encoderfile) application, running as an HTTP server.
+Derive vector embeddings from an instance of the Mozilla [encoderfile](https://www.mozilla.ai/open-tools/encoderfile) application, running as an HTTP server.
 
 ```
 encoderfile://?{PARAMETERS}
@@ -172,7 +172,7 @@ encoderfile://?{PARAMETERS}
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | no | Default is `http://localhost:8080`. The gRPC endpoint provided by `encoderfile` is not supported yet. |
+| client-uri | string | no | The URI for the `embedderfile` HTTP server endpoint. Default is `http://localhost:8080`. The gRPC server endpoint provided by `encoderfile` is not supported yet. |
 
 * https://www.mozilla.ai/open-tools/encoderfile
 * https://github.com/sfomuseum/go-encoderfile
@@ -187,13 +187,15 @@ llamafile://?{PARAMETERS}
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | no | Default is `http://localhost:8080`. |
+| client-uri | string | no | The URI for the `llamafile` HTTP server endpoint. Default is `http://localhost:8080`. |
 
 * https://github.com/mozilla-ai/llamafile/
 
 ### mlxclip://
 
 Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library.
+
+The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
 
 ```
 mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}
@@ -203,13 +205,15 @@ mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}
 
 ### mobileclip://
 
+Derive vector embeddings from the MobileCLIP models exposed via an instance of the [sfomuseum/swift-mobileclip](https://github.com/sfomuseum/swift-mobileclip) gRPC endpoint. 
+
 ```
 mobileclip://?{PARAMETERS}
 ```
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | yes | ... |
+| client-uri | string | yes | The URI for the `swift-mobileclip` gRPC server endpoint. Default is `grpc://localhosr:8080`. |
 | model | string | yes | The URI of the model to use for generating embeddings. |
 
 * https://github.com/apple/ml-mobileclip
@@ -218,11 +222,15 @@ mobileclip://?{PARAMETERS}
 
 ### null://
 
+Derive null (empty) vector embeddings. This is a "placeholder" implementation that will always return a zero-length list of embeddings.
+
 ```
 null://
 ```
 
 ### ollama://
+
+Derive vector embeddings from an instance of the [Ollama](https://ollama.com/) application.
 
 ```
 ollama://?{PARAMETERS}
@@ -238,15 +246,46 @@ ollama://?{PARAMETERS}
 
 ### openclip://
 
+Derive vector embeddings from a web service exposing the [OpenCLIP](https://github.com/mlfoundations/open_clip) model and library.
+
+The option involves a non-zero manual set up process discussed below.
+
 ```
 openclip://?{PARAMETERS}
 ```
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | no | Default is `http://localhost:8080`. |
+| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:8080`. |
 
 * https://github.com/mlfoundations/open_clip
 
+#### Set up
+
+```
+$> python -m venv openclip
+$> cd openclip/
+$> bash bin/activate
+$> bin/pip install flask
+$> bin/pip install open_clip_torch
+$> bin/pip install Pillow
+```
+
+Then, copy the code in [openclip_server.txt](openclip_server.txt) in to a file called openclip_server.py and launch it as follows:
+
+```
+$> bin/flask --app openclip_server run
+```
+
 ## Tests
 
+Because so many of the implementations above depend on the availability of external, third-party services their tests depend on the presence of Go build tags to run. They are :
+
+| Implementation | Build tag |
+| --- | --- |
+| encoderfile:// | encoderfile |
+| llamafile:// | llamafile |
+| mlxclip:// | mlxclip |
+| mobileclip:// | mobileclip |
+| ollama:// | ollama |
+| openclip:// | openclip |
