@@ -40,7 +40,11 @@ func NewLlamafileEmbedder[T Float](ctx context.Context, uri string) (Embedder[T]
 
 	q := u.Query()
 
-	client_uri := q.Get("client-uri")
+	client_uri := "http://localhost:8080"
+
+	if q.Has("client-uri") {
+		client_uri = q.Get("client-uri")
+	}
 
 	llamafile_cl, err := newLlamafileClient(ctx, client_uri)
 
@@ -48,10 +52,10 @@ func NewLlamafileEmbedder[T Float](ctx context.Context, uri string) (Embedder[T]
 		return nil, err
 	}
 
-	precision := "64"
+	precision := "float64"
 
 	if strings.HasSuffix(u.Scheme, "32") {
-		precision = fmt.Sprintf("%s#%d", precision, 32)
+		precision = fmt.Sprintf("%s#as%d", precision, 32)
 	}
 
 	e := &LlamafileEmbedder[T]{

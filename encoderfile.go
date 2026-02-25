@@ -41,7 +41,11 @@ func NewEncoderfileEmbedder[T Float](ctx context.Context, uri string) (Embedder[
 
 	q := u.Query()
 
-	client_uri := q.Get("client-uri")
+	client_uri := "http://localhost:8080"
+
+	if q.Has("client-uri") {
+		client_uri = q.Get("client-uri")
+	}
 
 	cl, err := client.NewClient(ctx, client_uri)
 
@@ -49,10 +53,10 @@ func NewEncoderfileEmbedder[T Float](ctx context.Context, uri string) (Embedder[
 		return nil, err
 	}
 
-	precision := "32"
+	precision := "float32"
 
 	if strings.HasSuffix(u.Scheme, "64") {
-		precision = fmt.Sprintf("%s#%d", precision, 64)
+		precision = fmt.Sprintf("%s#as%d", precision, 64)
 	}
 
 	e := &EncoderfileEmbedder[T]{
@@ -90,7 +94,7 @@ func (e *EncoderfileEmbedder[T]) TextEmbeddings(ctx context.Context, req *Embedd
 	rsp := &CommonEmbeddingsResponse[T]{
 		CommonId:        req.Id,
 		CommonPrecision: e.precision,
-		CommonModel:     "fixme",
+		CommonModel:     cl_rsp.ModelId,
 		CommonCreated:   ts,
 	}
 

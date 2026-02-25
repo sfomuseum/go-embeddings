@@ -45,23 +45,13 @@ func NewOllamaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 
 	q := u.Query()
 
-	scheme := "http"
+	client_uri := "http://localhost:11434"
 
-	if strings.HasPrefix(u.Scheme, "ollamas") {
-		scheme = "https"
+	if q.Has("client-uri") {
+		client_uri = q.Get("client-uri")
 	}
 
-	host := u.Host
-
-	if host == "" {
-		host = "localhost:11434"
-	}
-
-	client_uri := url.URL{}
-	client_uri.Scheme = scheme
-	client_uri.Host = host
-
-	cl, err := newOllamaClient(ctx, client_uri.String())
+	cl, err := newOllamaClient(ctx, client_uri)
 
 	if err != nil {
 		return nil, err
@@ -69,10 +59,10 @@ func NewOllamaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 
 	model := q.Get("model")
 
-	precision := "32"
+	precision := "float32"
 
 	if strings.HasSuffix(u.Scheme, "64") {
-		scheme = fmt.Sprintf("%s#%d", precision, 64)
+		precision = fmt.Sprintf("%s#as%d", precision, 64)
 	}
 
 	e := &OllamaEmbedder[T]{
@@ -99,9 +89,9 @@ func (e *OllamaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsR
 
 	rsp := &CommonEmbeddingsResponse[T]{
 		CommonId:        req.Id,
-		CommonModel:     e.model,
+		CommonModel:     fmt.Sprintf("ollama/%s", e.model),
 		CommonCreated:   ts,
-		CommonPrecision: "32",
+		CommonPrecision: e.precision,
 	}
 
 	switch {

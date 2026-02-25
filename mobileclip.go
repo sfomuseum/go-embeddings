@@ -47,10 +47,10 @@ func NewMobileCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T
 		return nil, err
 	}
 
-	precision := "32"
+	precision := "float32"
 
 	if strings.HasSuffix(u.Scheme, "64") {
-		precision = fmt.Sprintf("%s#%d", precision, 64)
+		precision = fmt.Sprintf("%s#as%d", precision, 64)
 	}
 
 	e := &MobileCLIPEmbedder[T]{

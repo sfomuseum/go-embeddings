@@ -3,6 +3,7 @@ package embeddings
 import (
 	"context"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -16,9 +17,9 @@ type NullEmbedder[T Float] struct {
 func init() {
 	ctx := context.Background()
 
-	RegisterEmbedder[float64](ctx, "null", NewNullEmbedder[float64])
-	RegisterEmbedder[float64](ctx, "null64", NewNullEmbedder[float64])
+	RegisterEmbedder[float32](ctx, "null", NewNullEmbedder[float32])
 	RegisterEmbedder[float32](ctx, "null32", NewNullEmbedder[float32])
+	RegisterEmbedder[float64](ctx, "null64", NewNullEmbedder[float64])
 }
 
 func NewNullEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
@@ -29,11 +30,11 @@ func NewNullEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, err
 	}
 
-	precision := "64"
+	precision := "float32"
 
-	switch u.Scheme {
-	case "null32":
-		precision = "64#32"
+	switch {
+	case strings.HasSuffix(u.Scheme, "64"):
+		precision = "%s#as64"
 	}
 
 	e := &NullEmbedder[T]{

@@ -33,7 +33,12 @@ func NewOpenCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T],
 	}
 
 	q := u.Query()
-	client_uri := q.Get("client-uri")
+
+	client_uri := "http://localhost:5000"
+
+	if q.Has("client-uri") {
+		client_uri = q.Get("client-uri")
+	}
 
 	open_cl, err := newOpenCLIPClient(ctx, client_uri)
 
