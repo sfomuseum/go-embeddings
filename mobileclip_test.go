@@ -13,19 +13,23 @@ func TestMobileCLIPEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "mobileclip://?client-uri=grpc://localhost:8080&model=s0")
+	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080&model=s0")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
-	rsp, err := emb.Embeddings32(ctx, "Hello world")
+	req := &EmbeddingsRequest{
+		Body: []byte("Hello world"),
+	}
+
+	rsp, err := emb.TextEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }
@@ -34,7 +38,7 @@ func TestMobileCLIPImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "mobileclip://?client-uri=grpc://localhost:8080&model=s0")
+	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080&model=s0")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -56,13 +60,17 @@ func TestMobileCLIPImageEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to read data from %s, %v", im_path, err)
 	}
 
-	rsp, err := emb.ImageEmbeddings32(ctx, im_body)
+	req := &EmbeddingsRequest{
+		Body: im_body,
+	}
+
+	rsp, err := emb.ImageEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }

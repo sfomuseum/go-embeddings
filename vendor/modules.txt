@@ -5,6 +5,9 @@ github.com/aaronland/go-roster
 ## explicit; go 1.25.0
 github.com/sfomuseum/go-encoderfile/client
 github.com/sfomuseum/go-encoderfile/embeddings
+# github.com/sfomuseum/go-flags v0.12.1
+## explicit; go 1.22
+github.com/sfomuseum/go-flags/flagset
 # github.com/sfomuseum/go-mobileclip v0.1.1
 ## explicit; go 1.25.2
 github.com/sfomuseum/go-mobileclip

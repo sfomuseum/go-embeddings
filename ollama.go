@@ -1,17 +1,19 @@
-//go:build ollama
-
 package embeddings
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
+	"time"
 )
 
 // OllamaEmbedder implements the `Embedder` interface using an Ollama API endpoint to derive embeddings.
-type OllamaEmbedder struct {
-	Embedder
-	client *ollamaClient
-	model  string
+type OllamaEmbedder[T Float] struct {
+	Embedder[T]
+	client    *ollamaClient
+	model     string
+	precision string
 }
 
 func init() {
@@ -23,15 +25,17 @@ func init() {
 	}
 
 	for _, s := range schemes {
-		err := RegisterEmbedder(ctx, s, NewOllamaEmbedder)
 
-		if err != nil {
-			panic(err)
-		}
+		s32 := fmt.Sprintf("%s32", s)
+		s64 := fmt.Sprintf("%s64", s)
+
+		RegisterEmbedder[float32](ctx, s, NewOllamaEmbedder[float32])
+		RegisterEmbedder[float32](ctx, s32, NewOllamaEmbedder[float32])
+		RegisterEmbedder[float64](ctx, s64, NewOllamaEmbedder[float64])
 	}
 }
 
-func NewOllamaEmbedder(ctx context.Context, uri string) (Embedder, error) {
+func NewOllamaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -41,23 +45,13 @@ func NewOllamaEmbedder(ctx context.Context, uri string) (Embedder, error) {
 
 	q := u.Query()
 
-	scheme := "http"
+	client_uri := "http://localhost:11434"
 
-	if u.Scheme == "ollamas" {
-		scheme = "https"
+	if q.Has("client-uri") {
+		client_uri = q.Get("client-uri")
 	}
 
-	host := u.Host
-
-	if host == "" {
-		host = "localhost:11434"
-	}
-
-	client_uri := url.URL{}
-	client_uri.Scheme = scheme
-	client_uri.Host = host
-
-	cl, err := newOllamaClient(ctx, client_uri.String())
+	cl, err := newOllamaClient(ctx, client_uri)
 
 	if err != nil {
 		return nil, err
@@ -65,40 +59,51 @@ func NewOllamaEmbedder(ctx context.Context, uri string) (Embedder, error) {
 
 	model := q.Get("model")
 
-	e := &OllamaEmbedder{
-		client: cl,
-		model:  model,
+	precision := "float32"
+
+	if strings.HasSuffix(u.Scheme, "64") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
+	}
+
+	e := &OllamaEmbedder[T]{
+		client:    cl,
+		model:     model,
+		precision: precision,
 	}
 
 	return e, nil
 }
 
-func (e *OllamaEmbedder) Embeddings(ctx context.Context, content string) ([]float64, error) {
+func (e *OllamaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	e32, err := e.Embeddings32(ctx, content)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return AsFloat64(e32), nil
-}
-
-func (e *OllamaEmbedder) Embeddings32(ctx context.Context, content string) ([]float32, error) {
-
-	rsp, err := e.client.embeddings(ctx, e.model, content)
+	cl_rsp, err := e.client.embeddings(ctx, e.model, string(req.Body))
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings[0], nil
+	e32 := cl_rsp.Embeddings[0]
+
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonModel:     fmt.Sprintf("ollama/%s", e.model),
+		CommonCreated:   ts,
+		CommonPrecision: e.precision,
+	}
+
+	switch {
+	case strings.HasSuffix(e.precision, "64"):
+		rsp.CommonEmbeddings = toFloat64Slice[T](AsFloat64(e32))
+	default:
+		rsp.CommonEmbeddings = toFloat32Slice[T](e32)
+	}
+
+	return rsp, nil
 }
 
-func (e *OllamaEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
-	return nil, NotImplemented
-}
-
-func (e *OllamaEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]float32, error) {
+func (e *OllamaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 	return nil, NotImplemented
 }

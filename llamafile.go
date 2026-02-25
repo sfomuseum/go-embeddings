@@ -1,6 +1,6 @@
-//go:build llamafile
-
 package embeddings
+
+// Note that newer versions of llamafile no longer generate embeddings. See encoderfile.go
 
 // https://github.com/Mozilla-Ocho/llamafile/blob/main/llama.cpp/server/README.md#api-endpoints
 // https://github.com/Mozilla-Ocho/llamafile?tab=readme-ov-file#other-example-llamafiles
@@ -8,56 +8,29 @@ package embeddings
 // curl --request POST --url http://localhost:8080/embedding --header "Content-Type: application/json" --data '{"content": "Hello world" }'
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	_ "io"
-	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
 
-type LlamafileImageDataEmbeddingRequest struct {
-	Id   int64  `json:"id"`
-	Data string `json:"data"`
-}
-
-type LlamafileEmbeddingRequest struct {
-	Content   string                                `json:"content,omitempty"`
-	ImageData []*LlamafileImageDataEmbeddingRequest `json:"image_data,omitempty"`
-}
-
-type LlamafileEmbeddingResponse struct {
-	Embeddings []float64 `json:"embedding,omitempty"`
-}
-
 // LlamafileEmbedder implements the `Embedder` interface using an Llamafile API endpoint to derive embeddings.
-type LlamafileEmbedder struct {
-	Embedder
-	client *http.Client
-	host   string
-	port   string
-	tls    bool
+type LlamafileEmbedder[T Float] struct {
+	Embedder[T]
+	client    *llamafileClient
+	precision string
 }
 
 func init() {
 	ctx := context.Background()
-	err := RegisterEmbedder(ctx, "llamafile", NewLlamafileEmbedder)
-
-	if err != nil {
-		panic(err)
-	}
+	RegisterEmbedder[float64](ctx, "llamafile", NewLlamafileEmbedder)
+	RegisterEmbedder[float32](ctx, "llamafile32", NewLlamafileEmbedder)
+	RegisterEmbedder[float64](ctx, "llamafile64", NewLlamafileEmbedder)
 }
 
-func NewLlamafileEmbedder(ctx context.Context, uri string) (Embedder, error) {
-
-	host := "localhost"
-	port := "8080"
-	tls := false
+func NewLlamafileEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -65,163 +38,98 @@ func NewLlamafileEmbedder(ctx context.Context, uri string) (Embedder, error) {
 		return nil, err
 	}
 
-	if u.Host != "" {
-		host = u.Host
-
-		parts := strings.Split(host, ":")
-
-		if len(parts) < 1 {
-			return nil, fmt.Errorf("Failed to parse host component of URI")
-		}
-
-		host = parts[0]
-	}
-
-	if u.Port() != "" {
-		port = u.Port()
-	}
-
 	q := u.Query()
 
-	if q.Has("tls") {
+	client_uri := "http://localhost:8080"
 
-		v, err := strconv.ParseBool("tls")
-
-		if err != nil {
-			return nil, fmt.Errorf("Invalid ?tls= parameter, %w", err)
-		}
-
-		tls = v
+	if q.Has("client-uri") {
+		client_uri = q.Get("client-uri")
 	}
 
-	cl := &http.Client{}
+	llamafile_cl, err := newLlamafileClient(ctx, client_uri)
 
-	e := &LlamafileEmbedder{
-		client: cl,
-		host:   host,
-		port:   port,
-		tls:    tls,
+	if err != nil {
+		return nil, err
+	}
+
+	precision := "float64"
+
+	if strings.HasSuffix(u.Scheme, "32") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
+	}
+
+	e := &LlamafileEmbedder[T]{
+		client:    llamafile_cl,
+		precision: precision,
 	}
 
 	return e, nil
 }
 
-func (e *LlamafileEmbedder) Embeddings(ctx context.Context, content string) ([]float64, error) {
+func (e *LlamafileEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	req := &LlamafileEmbeddingRequest{
-		Content: content,
+	ll_req := &llamafileEmbeddingRequest{
+		Content: string(req.Body),
 	}
 
-	rsp, err := e.embeddings(ctx, req)
+	ll_rsp, err := e.client.embeddings(ctx, ll_req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings, nil
+	rsp := e.llamafileResponseToEmbeddingsResponse(req, ll_rsp)
+	return rsp, nil
 }
 
-func (e *LlamafileEmbedder) Embeddings32(ctx context.Context, content string) ([]float32, error) {
+func (e *LlamafileEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	e64, err := e.Embeddings(ctx, content)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return AsFloat32(e64), nil
-}
-
-func (e *LlamafileEmbedder) ImageEmbeddings(ctx context.Context, data []byte) ([]float64, error) {
-
-	data_b64 := base64.StdEncoding.EncodeToString(data)
+	data_b64 := base64.StdEncoding.EncodeToString(req.Body)
 
 	now := time.Now()
 	ts := now.Unix()
 
-	image_req := &LlamafileImageDataEmbeddingRequest{
+	image_req := &llamafileImageDataEmbeddingRequest{
 		Data: data_b64,
 		Id:   ts,
 	}
 
-	req := &LlamafileEmbeddingRequest{
-		ImageData: []*LlamafileImageDataEmbeddingRequest{
+	ll_req := &llamafileEmbeddingRequest{
+		ImageData: []*llamafileImageDataEmbeddingRequest{
 			image_req,
 		},
 	}
 
-	rsp, err := e.embeddings(ctx, req)
+	ll_rsp, err := e.client.embeddings(ctx, ll_req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return rsp.Embeddings, nil
+	rsp := e.llamafileResponseToEmbeddingsResponse(req, ll_rsp)
+	return rsp, nil
 }
 
-func (e *LlamafileEmbedder) ImageEmbeddings32(ctx context.Context, data []byte) ([]float32, error) {
+func (e *LlamafileEmbedder[T]) llamafileResponseToEmbeddingsResponse(req *EmbeddingsRequest, ll_rsp *llamafileEmbeddingResponse) EmbeddingsResponse[T] {
 
-	e64, err := e.ImageEmbeddings(ctx, data)
+	now := time.Now()
+	ts := now.Unix()
 
-	if err != nil {
-		return nil, err
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonPrecision: e.precision,
+		CommonCreated:   ts,
+		CommonModel:     "",
 	}
 
-	return AsFloat32(e64), nil
-}
+	e64 := ll_rsp.Embeddings
 
-func (e *LlamafileEmbedder) embeddings(ctx context.Context, llamafile_req *LlamafileEmbeddingRequest) (*LlamafileEmbeddingResponse, error) {
-
-	u := url.URL{}
-	u.Scheme = "http"
-	u.Host = fmt.Sprintf("%s:%s", e.host, e.port)
-	u.Path = "/embedding"
-
-	if e.tls {
-		u.Scheme = "https"
+	switch {
+	case strings.HasSuffix(e.precision, "32"):
+		rsp.CommonEmbeddings = toFloat32Slice[T](AsFloat32(e64))
+	default:
+		rsp.CommonEmbeddings = toFloat64Slice[T](e64)
 	}
 
-	endpoint := u.String()
-
-	enc_msg, err := json.Marshal(llamafile_req)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to encode message, %w", err)
-	}
-
-	br := bytes.NewReader(enc_msg)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, br)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to create new request, %w", err)
-	}
-
-	req.Header.Set("Content-type", "application/json")
-
-	rsp, err := e.client.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to execute request, %w", err)
-	}
-
-	defer rsp.Body.Close()
-
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Embeddings request failed %d: %s", rsp.StatusCode, rsp.Status)
-	}
-
-	// body, _ := io.ReadAll(rsp.Body)
-	// fmt.Println("WUT", string(body))
-
-	var llamafile_rsp *LlamafileEmbeddingResponse
-
-	dec := json.NewDecoder(rsp.Body)
-	err = dec.Decode(&llamafile_rsp)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w", err)
-	}
-
-	return llamafile_rsp, nil
+	return rsp
 }

@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/aaronland/go-roster v1.0.0
 	github.com/sfomuseum/go-encoderfile v0.0.1
+	github.com/sfomuseum/go-flags v0.12.1
 	github.com/sfomuseum/go-mobileclip v0.1.1
 )
 

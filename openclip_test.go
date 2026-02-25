@@ -13,19 +13,23 @@ func TestOpenCLIPEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "openclip://")
+	emb, err := NewEmbedder32(ctx, "openclip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
-	rsp, err := emb.Embeddings(ctx, "Hello world")
+	req := &EmbeddingsRequest{
+		Body: []byte("Hello world"),
+	}
+
+	rsp, err := emb.TextEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }
@@ -34,13 +38,13 @@ func TestOpenCLIPImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder(ctx, "openclip://")
+	emb, err := NewEmbedder32(ctx, "openclip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
-	im_path := "../fixtures/1527845303_walrus.jpg"
+	im_path := "fixtures/1527845303_walrus.jpg"
 
 	im_r, err := os.Open(im_path)
 
@@ -56,13 +60,17 @@ func TestOpenCLIPImageEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to read data from %s, %v", im_path, err)
 	}
 
-	rsp, err := emb.ImageEmbeddings(ctx, im_body)
+	req := &EmbeddingsRequest{
+		Body: im_body,
+	}
+
+	rsp, err := emb.ImageEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }

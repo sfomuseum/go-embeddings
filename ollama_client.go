@@ -1,5 +1,3 @@
-//go:build ollama
-
 package embeddings
 
 // https://docs.ollama.com/api/introduction

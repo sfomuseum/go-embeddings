@@ -4,146 +4,314 @@ Go package defining a common interface for generating text and image embeddings.
 
 ## Documentation
 
-Documentation is incomplete at this time.
+`godoc` is currently incomplete.
 
-## Interfaces
+## Motivation
 
-### embeddings.Embedder
+This is a simple abstraction library, written in Go, around a variety of services which produce vector embeddings. There are many such libraries and this one is ours. It tries to be the "simplest dumbest" thing for the most common operations and data needs. These ideas are encapsulated in the `EmbeddingsRequest` and `EmbeddingsResponse` types.
 
 ```
-// Embedder defines an interface for generating (vector) embeddings
-type Embedder interface {
-	// Embeddings returns the embeddings for a string as a list of float64 values.
-	Embeddings(context.Context, string) ([]float64, error)
-	// Embeddings32 returns the embeddings for a string as a list of float32 values.
-	Embeddings32(context.Context, string) ([]float32, error)
-	// ImageEmbeddings returns the embeddings for a base64-encoded image as a list of float64 values.	
-	ImageEmbeddings(context.Context, string) ([]float64, error)
-	// ImageEmbeddings32 returns the embeddings for a base64-encoded image as a list of float32 values.		
-	ImageEmbeddings32(context.Context, string) ([]float32, error)
+type EmbeddingsRequest struct {
+	Id    string `json:"id,omitempty"`
+	Model string `json:"model"`
+	Body  []byte `json:"body"`
+}
+
+type EmbeddingsResponse[T Float] interface {
+	Id() string
+	Model() string
+	Embeddings() []T
+	Dimensions() int32
+	Precision() string
+	Created() int64
 }
 ```
 
-## Default implementations
+The default implementation of the `EmbeddingsResponse` interface is the `CommonEmbeddingsResponse` type:
 
-The rule of thumb is that if an `embeddings.Embedder` implementation can be defined without any external dependencies it is included here. Otherwise it is included in its own package.
+```
+type CommonEmbeddingsResponse[T Float] struct {
+	EmbeddingsResponse[T] `json:",omitempty"`
+	CommonId              string `json:"id,omitempty"`
+	CommonEmbeddings      []T    `json:"embeddings"`
+	CommonModel           string `json:"model"`
+	CommonCreated         int64  `json:"created"`
+	CommonPrecision       string `json:"precision"`
+}
+```
 
-### LlamafileEmbedder
+While not specific to SFO Museum this package is targeted at the kinds of things SFO Museum needs to today meaning it may be lacking features you need or want. 
 
-The `LlamafileEmbedder` implementation uses the [llamafile application's REST API](https://github.com/Mozilla-Ocho/llamafile/blob/main/llama.cpp/server/README.md#api-endpoints) to generate embeddings for a text. This package assumes that the llamafile application has already installed, is running and set up to use the models necessary to generate embeddings. Please consult the [llamafile documentation](https://github.com/Mozilla-Ocho/llamafile/tree/main) for details.
+## Design
 
-The syntax for creating a new `LlamafileEmbedder` is:
+To account for the fact that most embeddings models still return `float32` vector data but an increasing number of models return `float64` vectors this package wraps both options in a `Float` interface.
+
+```
+type Float interface{ ~float32 | ~float64 }
+```
+
+That `Float` is then used as a generic value (for embeddings) in a common `EmbeddingsResponse` interface:
+
+```
+type EmbeddingsResponse[T Float] interface {
+	Id() string
+	Model() string
+	Embeddings() []T
+	Dimensions() int32
+	Precision() string
+	Created() int64
+}
+```
+
+That interface is then used as the return value for an `Embedder` interface:
+
+```
+type Embedder[T Float] interface {
+	TextEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
+	ImageEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
+}
+```
+
+This means that you need to specify the float type you want the interface to return when you instantiate that interface. For example:
+
+```
+ctx := context.Backgroud()
+
+uri32 := "ollama://?model=embeddinggemma"
+uri64 := "encoderfile://"
+
+cl, _ := embeddings.NewEmbedder[float32](ctx, uri32)
+cl, _ := embeddings.NewEmbedder[float64](ctx, uri64)
+```
+
+There are also handy `NewEmbedder32` and `NewEmbedder64` methods which are little more than syntactic sugar. For example:
+
+```
+ctx := context.Backgroud()
+
+uri32 := "ollama://?model=embeddinggemma"
+uri64 := "encoderfile://"
+
+cl, _ := embeddings.NewEmbedder32(ctx, uri32)
+cl, _ := embeddings.NewEmbedder64(ctx, uri64)
+```
+
+The `NewEmbedder`, `NewEmbedder32` and `NewEmbedder64` all have the same signature: A `context.Context` instance and a URI string used to configure and instantiate the underlying embeddings provider implementation. These are discussed in detail below.
+
+Both the `TextEmbeddings` and `ImageEmbeddings` methods take the same input, a `EmbeddingsRequest` struct:
+
+```
+type EmbeddingsRequest struct {
+	Id    string `json:"id,omitempty"`
+	Model string `json:"model"`
+	Body  []byte `json:"body"`
+}
+```
+
+As mentioned both methods return an `EmbeddingsResponse[T]` instance. The default implementation of the `EmbeddingsResponse[T]` interface used by this package is the `CommonEmbeddingsResponse` type. See [response.go](response.go) for details.
+
+## Example
+
+_Error handling omitted for the sake of brevity._
 
 ```
 import (
 	"context"
-	
+	"encoding/json"
+	"os"
+
 	"github.com/sfomuseum/go-embeddings"
 )
 
-ctx := context.Background()
-e, _ := embeddings.NewEmbedder(ctx, "llamafile://{HOST}:{PORT}?{PARAMETERS")
+func main() {
+
+	ctx := context.Background()
+
+	emb, _ := embeddings.NewEmbedder32(ctx, "ollama://?model=embeddinggemma")
+
+	req := &embeddings.EmbeddingsRequest{
+		Body: []byte("Hello world"),
+	}
+
+	rsp, _ := emb.TextEmbeddings(ctx, req)
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.Encode(rsp)
 ```
 
-Where `{HOST}` and `{PORT}` are the hostname and port the llamafile API is listening for requests on. Defaults, if omitted, are "localhost" and "8080", respectively.
+Which would return the following:
 
-Valid parameters for the `LlamafileEmbedder` implemetation are:
+```
+{
+  "embeddings": [
+    -0.21400317549705505,
+    0.02651195414364338,
+    ... more embeddings
+    -0.04678588733077049,
+    -0.042774248868227005
+  ],
+  "model": "ollama/embeddinggemma",
+  "created": 1771985811,
+  "precision": "float32"
+}
+```
+
+## Precision
+
+The convention for precision values is a string, for example "float32". Typically an embeddings service will return vector embeddings with a single precision but the `Embedder` interface allows you to derive embeddings as either `float32` or `float64` value. In order to preserve the origin precision information if embeddings are requested in a precision other than that generated by a service the _requested_ precision will be appened to the origin value.
+
+For example, if you request float64 values from a service that returns float32 values those data will be recast and the precision string will be updated to read "float32#as-float64".
+
+## Implementations
+
+### encoderfile://
+
+Derive vector embeddings from an instance of the Mozilla [encoderfile](https://www.mozilla.ai/open-tools/encoderfile) application, running as an HTTP server.
+
+```
+encoderfile://?{PARAMETERS}
+```
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| tls | boolean| no | A boolean flag signaling that requests to the llamafile API should be made using a secure connection. Default is false. |
+| client-uri | string | no | The URI for the `embedderfile` HTTP server endpoint. Default is `http://localhost:8080`. The gRPC server endpoint provided by `encoderfile` is not supported yet. |
 
-Use of the `LlamafileEmbedder` implementation requires tools be built with the `-llamafile` tag.
+#### See also
 
-### OpenCLIPEmbedder
+* https://www.mozilla.ai/open-tools/encoderfile
+* https://github.com/sfomuseum/go-encoderfile
 
-The `OpenCLIPEmbedder` implementation derives embeddings from an HTTP server that processes `POST` requests. This package assumes that the server has been installed and is already running. A sample HTTP server (Flask) implementation is included below:
+### llamafile://
 
-The syntax for creating a new `OpenCLIPEmbedder` is:
+Derive vector embedding from an instance of the Mozilla [llamafile](#) application. Note that newer versions of `llamafile` not longer expose an interface for deriving embeddings so this implementation will only work with older builds. See the `encoderfile://` implementation for an alternative.
 
 ```
-import (
-	"context"
-	
-	"github.com/sfomuseum/go-embeddings"
-)
-
-ctx := context.Background()
-e, _ := embeddings.NewEmbedder(ctx, "openclip://{HOST}:{PORT}?{PARAMETERS")
+llamafile://?{PARAMETERS}
 ```
-
-Where `{HOST}` and `{PORT}` are the hostname and port the llamafile API is listening for requests on. Defaults, if omitted, are "127.0.0.1" and "5000", respectively.
-
-Valid parameters for the `OpenCLIPEmbedder` implemetation are:
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| tls | boolean| no | A boolean flag signaling that requests to the llamafile API should be made using a secure connection. Default is false. |
+| client-uri | string | no | The URI for the `llamafile` HTTP server endpoint. Default is `http://localhost:8080`. |
 
-Use of the `OpenCLIPEmbedder` implementation requires tools be built with the `-openclip` tag.
+#### See also
 
-##### OpenCLIP server
+* https://github.com/mozilla-ai/llamafile/
 
-Here is an example of a very simple Flask server to process embedding requests locally. Imagine this is a file called `openclip_server.py`:
+### mlxclip://
 
-```
-from flask import Flask, request, jsonify
-from langchain_experimental.open_clip import OpenCLIPEmbeddings
-from PIL import Image
-import tempfile
-import base64
-import os
+Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library which emits JSON-encoded embeddings to STDOUT.
 
-model="ViT-g-14"
-checkpoint="laion2b_s34b_b88k"
-
-# For smaller, memory-constrained devices try something like:
-# model="ViT-B-32"
-# checkpoint="laion2b_s34b_b79k"
-
-clip_embd = OpenCLIPEmbeddings(model_name=model, checkpoint=checkpoint)
-
-app = Flask(__name__)
-
-@app.route("/embeddings", methods=['POST'])
-def embeddings():
-    req = request.json
-    embeddings = clip_embd.embed_documents([ req["data"] ])
-    return jsonify({"embedding": embeddings[0]})
-
-@app.route("/embeddings/image", methods=['POST'])
-def embeddings_image():
-
-    req = request.json
-    body = base64.b64decode(req["image_data"][0]["data"])
-
-    # Note that `delete_on_close=False` is a Python 3.12-ism
-    # Use `delete=False` for Python 3.11
-    
-    with tempfile.NamedTemporaryFile(delete_on_close=False, mode="wb") as wr:
-
-        wr.write(body)
-        wr.close()
-
-        embeddings = clip_embd.embed_image([wr.name])
-        os.remove(wr.name)
-
-        return jsonify({"embedding": embeddings[0]})
-```
-
-To start the server:
+The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
 
 ```
-$> ./bin/flask --app openclip_server run
-/usr/local/src/lancedb/lib/python3.12/site-packages/open_clip/factory.py:129: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  checkpoint = torch.load(checkpoint_path, map_location=map_location)
+mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}
+```
+
+#### Set up
+
+As of this writing I am not sure I have working set up instructions. Specifically you want something like the include code in the [mlxclip_py.txt](mlxclip_py.txt) file which in turn loads the [mlx_clip](https://github.com/harperreed/mlx_clip) library. Nothing fancy but since first getting this to work something has changed (?) that prevents Python from importing the `mlx_clip` package. This remains to be resolved.
+
+#### See also
+
+* https://github.com/harperreed/mlx_clip
+* https://github.com/ml-explore/mlx-examples/tree/main/clip
+
+### mobileclip://
+
+Derive vector embeddings from the MobileCLIP models exposed via an instance of the [sfomuseum/swift-mobileclip](https://github.com/sfomuseum/swift-mobileclip) gRPC endpoint. 
+
+```
+mobileclip://?{PARAMETERS}
+```
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| client-uri | string | yes | The URI for the `swift-mobileclip` gRPC server endpoint. Default is `grpc://localhosr:8080`. |
+| model | string | yes | The URI of the model to use for generating embeddings. |
+
+#### See also
+
+* https://github.com/apple/ml-mobileclip
+* https://github.com/sfomuseum/swift-mobileclip
+* https://github.com/sfomuseum/go-mobileclip
+
+### null://
+
+Derive null (empty) vector embeddings. This is a "placeholder" implementation that will always return a zero-length list of embeddings.
+
+```
+null://
+```
+
+### ollama://
+
+Derive vector embeddings from an instance of the [Ollama](https://ollama.com/) application.
+
+```
+ollama://?{PARAMETERS}
+```
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| client-uri | string | no | Default is `http://localhost:11434`. |
+| model | string | yes | The name of the model to use for generating embeddings. |
+
+#### See also
+
+* https://ollama.com/
+* https://docs.ollama.com/api/introduction
+
+### openclip://
+
+Derive vector embeddings from a web service exposing the [OpenCLIP](https://github.com/mlfoundations/open_clip) model and library.
+
+The option involves a non-zero manual set up process discussed below.
+
+```
+openclip://?{PARAMETERS}
+```
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:8080`. |
+
+#### Set up
+
+Using this implementation requires running a HTTP service exposing the OpenCLIP functionality. The easiest way to do that is in a Python "virtual environment" configured as follows:
+
+```
+$> python -m venv openclip
+$> cd openclip/
+$> bash bin/activate
+$> bin/pip install flask
+$> bin/pip install open_clip_torch
+$> bin/pip install Pillow
+```
+
+Then, copy the included code in [openclip_server.txt](openclip_server.txt) in to a file called openclip_server.py and launch it as follows:
+
+```
+$> bin/flask --app openclip_server run
  * Serving Flask app 'openclip_server'
  * Debug mode: off
 INFO:werkzeug:WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
  * Running on http://127.0.0.1:5000
+INFO:werkzeug:Press CTRL+C to quit
 ```
 
-## Other implementations
+#### See also
 
-* https://github.com/sfomuseum/go-embeddings-ollama
-* https://github.com/sfomuseum/go-embeddings-mlxclip
+* https://github.com/mlfoundations/open_clip
+
+## Tests
+
+Because so many of the implementations above depend on the availability of external, third-party services their tests depend on the presence of Go build tags to run. They are :
+
+| Implementation | Build tag |
+| --- | --- |
+| encoderfile:// | encoderfile |
+| llamafile:// | llamafile |
+| mlxclip:// | mlxclip |
+| mobileclip:// | mobileclip |
+| ollama:// | ollama |
+| openclip:// | openclip |

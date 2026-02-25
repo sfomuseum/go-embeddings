@@ -1,4 +1,4 @@
-//go:build llamafile
+//go:build mlxclip
 
 package embeddings
 
@@ -9,11 +9,11 @@ import (
 	"testing"
 )
 
-func TestLlamafileEmbeddings(t *testing.T) {
+func TestMlxclipEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder64(ctx, "llamafile://")
+	emb, err := NewEmbedder32(ctx, "mlxclip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -34,11 +34,11 @@ func TestLlamafileEmbeddings(t *testing.T) {
 	}
 }
 
-func TestLlamafileImageEmbeddings(t *testing.T) {
+func TestMlxclipImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder64(ctx, "llamafile://")
+	emb, err := NewEmbedder32(ctx, "mlxclip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)

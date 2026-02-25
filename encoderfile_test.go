@@ -17,13 +17,17 @@ func TestEncoderfileEmbeddings(t *testing.T) {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
-	rsp, err := emb.Embeddings(ctx, "Hello world")
+	req := &EmbeddingsRequest{
+		Body: []byte("Hello world"),
+	}
+
+	rsp, err := emb.Embeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
 	}
 
-	if len(rsp) == 0 {
+	if len(rsp.Embeddings()) == 0 {
 		t.Fatalf("Empty embedding")
 	}
 }

@@ -1,7 +1,5 @@
 package embeddings
 
-// https://github.com/asg017/sqlite-vss
-
 import (
 	"context"
 	"fmt"
@@ -13,26 +11,20 @@ import (
 )
 
 // Embedder defines an interface for generating (vector) embeddings
-type Embedder interface {
-	// Embeddings returns the embeddings for a string as a list of float64 values.
-	Embeddings(context.Context, string) ([]float64, error)
-	// Embeddings32 returns the embeddings for a string as a list of float32 values.
-	Embeddings32(context.Context, string) ([]float32, error)
-	// ImageEmbeddings returns the embeddings for a base64-encoded image as a list of float64 values.
-	ImageEmbeddings(context.Context, []byte) ([]float64, error)
-	// ImageEmbeddings32 returns the embeddings for a base64-encoded image as a list of float32 values.
-	ImageEmbeddings32(context.Context, []byte) ([]float32, error)
+type Embedder[T Float] interface {
+	TextEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
+	ImageEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
 }
 
 // EmbedderInitializationFunc is a function defined by individual embedder package and used to create
 // an instance of that embedder
-type EmbedderInitializationFunc func(ctx context.Context, uri string) (Embedder, error)
+type EmbedderInitializationFunc[T Float] func(ctx context.Context, uri string) (Embedder[T], error)
 
 var embedder_roster roster.Roster
 
 // RegisterEmbedder registers 'scheme' as a key pointing to 'init_func' in an internal lookup table
 // used to create new `Embedder` instances by the `NewEmbedder` method.
-func RegisterEmbedder(ctx context.Context, scheme string, init_func EmbedderInitializationFunc) error {
+func RegisterEmbedder[T Float](ctx context.Context, scheme string, init_func EmbedderInitializationFunc[T]) error {
 
 	err := ensureEmbedderRoster()
 
@@ -59,11 +51,49 @@ func ensureEmbedderRoster() error {
 	return nil
 }
 
-// NewEmbedder returns a new `Embedder` instance configured by 'uri'. The value of 'uri' is parsed
+func NewEmbedder64(ctx context.Context, uri string) (Embedder[float64], error) {
+
+	uri, err := ensureSuffix(uri, "64")
+
+	if err != nil {
+		return nil, err
+	}
+
+	return NewEmbedder[float64](ctx, uri)
+}
+
+func NewEmbedder32(ctx context.Context, uri string) (Embedder[float32], error) {
+
+	uri, err := ensureSuffix(uri, "32")
+
+	if err != nil {
+		return nil, err
+	}
+
+	return NewEmbedder[float32](ctx, uri)
+}
+
+func ensureSuffix(uri string, suffix string) (string, error) {
+
+	u, err := url.Parse(uri)
+
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasSuffix(u.Scheme, suffix) {
+		u.Scheme = fmt.Sprintf("%s%s", u.Scheme, suffix)
+		uri = u.String()
+	}
+
+	return uri, nil
+}
+
+// newEmbedder returns a new `Embedder` instance configured by 'uri'. The value of 'uri' is parsed
 // as a `url.URL` and its scheme is used as the key for a corresponding `EmbedderInitializationFunc`
 // function used to instantiate the new `Embedder`. It is assumed that the scheme (and initialization
 // function) have been registered by the `RegisterEmbedder` method.
-func NewEmbedder(ctx context.Context, uri string) (Embedder, error) {
+func NewEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -79,7 +109,7 @@ func NewEmbedder(ctx context.Context, uri string) (Embedder, error) {
 		return nil, err
 	}
 
-	init_func := i.(EmbedderInitializationFunc)
+	init_func := i.(EmbedderInitializationFunc[T])
 	return init_func(ctx, uri)
 }
 
