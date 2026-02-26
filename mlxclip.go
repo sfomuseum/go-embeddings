@@ -40,10 +40,10 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 		return nil, err
 	}
 
-	precision := "float32"
+	precision := "float64"
 
-	if strings.HasSuffix(u.Scheme, "64") {
-		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
+	if strings.HasSuffix(u.Scheme, "32") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
 	}
 
 	e := &MLXClipEmbedder[T]{
@@ -114,10 +114,10 @@ func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *Embed
 
 	defer r.Close()
 
-	var e32 []float32
+	var e64 []float64
 
 	dec := json.NewDecoder(r)
-	err = dec.Decode(&e32)
+	err = dec.Decode(&e64)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w (%s)", err, tmp.Name())
@@ -134,10 +134,10 @@ func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *Embed
 	}
 
 	switch {
-	case strings.HasSuffix(e.precision, "64"):
-		rsp.CommonEmbeddings = toFloat64Slice[T](AsFloat64(e32))
+	case strings.HasSuffix(e.precision, "32"):
+		rsp.CommonEmbeddings = toFloat32Slice[T](AsFloat32(e64))
 	default:
-		rsp.CommonEmbeddings = toFloat32Slice[T](e32)
+		rsp.CommonEmbeddings = toFloat64Slice[T](e64)
 	}
 
 	return rsp, nil
