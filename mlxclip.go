@@ -54,11 +54,11 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 	return e, nil
 }
 
-func (e *MLXClipEmbedder[T]) TextEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+func (e *MLXClipEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 	return e.generate_embeddings(ctx, req, "text", string(req.Body))
 }
 
-func (e *MLXClipEmbedder[T]) ImageEmbeddings32(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+func (e *MLXClipEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	tmp, err := os.CreateTemp("", "mlxclip.*.img")
 
