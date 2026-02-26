@@ -21,7 +21,7 @@ func TestEncoderfileEmbeddings(t *testing.T) {
 		Body: []byte("Hello world"),
 	}
 
-	rsp, err := emb.Embeddings(ctx, req)
+	rsp, err := emb.TextEmbeddings(ctx, req)
 
 	if err != nil {
 		t.Fatalf("Failed to derive embeddings, %v", err)
