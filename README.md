@@ -227,7 +227,6 @@ mobileclip://?{PARAMETERS}
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
 | client-uri | string | yes | The URI for the `swift-mobileclip` gRPC server endpoint. Default is `grpc://localhosr:8080`. |
-| model | string | yes | The URI of the model to use for generating embeddings. |
 
 #### See also
 

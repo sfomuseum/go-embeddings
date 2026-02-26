@@ -13,7 +13,7 @@ func TestMobileCLIPEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080&model=s0")
+	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -21,6 +21,7 @@ func TestMobileCLIPEmbeddings(t *testing.T) {
 
 	req := &EmbeddingsRequest{
 		Body: []byte("Hello world"),
+		Model: "s0",
 	}
 
 	rsp, err := emb.TextEmbeddings(ctx, req)
@@ -38,7 +39,7 @@ func TestMobileCLIPImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080&model=s0")
+	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -62,6 +63,7 @@ func TestMobileCLIPImageEmbeddings(t *testing.T) {
 
 	req := &EmbeddingsRequest{
 		Body: im_body,
+		Model: "s1",
 	}
 
 	rsp, err := emb.ImageEmbeddings(ctx, req)

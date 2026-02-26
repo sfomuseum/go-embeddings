@@ -17,7 +17,6 @@ import (
 type MobileCLIPEmbedder[T Float] struct {
 	Embedder[T]
 	client    mobileclip.EmbeddingsClient
-	model     string
 	precision string
 }
 
@@ -39,7 +38,6 @@ func NewMobileCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T
 	q := u.Query()
 
 	client_uri := q.Get("client-uri")
-	model := q.Get("model")
 
 	cl, err := mobileclip.NewEmbeddingsClient(ctx, client_uri)
 
@@ -55,7 +53,6 @@ func NewMobileCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T
 
 	e := &MobileCLIPEmbedder[T]{
 		client:    cl,
-		model:     model,
 		precision: precision,
 	}
 
@@ -65,7 +62,7 @@ func NewMobileCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T
 func (e *MobileCLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	mc_req := &mobileclip.EmbeddingsRequest{
-		Model: e.model,
+		Model: req.Model,
 		Body:  req.Body,
 	}
 
@@ -82,7 +79,7 @@ func (e *MobileCLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *Embeddi
 func (e *MobileCLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	mc_req := &mobileclip.EmbeddingsRequest{
-		Model: e.model,
+		Model: req.Model,
 		Body:  req.Body,
 	}
 
@@ -105,7 +102,7 @@ func (e *MobileCLIPEmbedder[T]) mobileCLIPResponseToEmbeddingsResponse(req *Embe
 		CommonId:        req.Id,
 		CommonPrecision: e.precision,
 		CommonCreated:   ts,
-		CommonModel:     e.model,
+		CommonModel:     mc_rsp.Model,
 	}
 
 	e32 := mc_rsp.Embeddings
