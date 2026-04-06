@@ -1,5 +1,7 @@
 package embeddings
 
+// https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md
+
 import (
 	"context"
 	"encoding/json"
@@ -43,6 +45,10 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 
 	q := u.Query()
 
+	if !q.Has("model"){
+		return nil, fmt.Errorf("Required model (HuggingFace checkpoint URI) missing.")
+	}
+	
 	model := q.Get("model")
 
 	precision := "float64"
@@ -136,7 +142,7 @@ func (e *SigLIPEmbedder[T]) generate_embeddings(ctx context.Context, req *Embedd
 		CommonId:        req.Id,
 		CommonPrecision: e.precision,
 		CommonCreated:   ts,
-		CommonModel:     "siglip",
+		CommonModel:     e.model,
 	}
 
 	switch {
