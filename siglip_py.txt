@@ -1,0 +1,93 @@
+from transformers import AutoProcessor, AutoModel
+import torch
+from PIL import Image
+
+def get_embedding(
+    model_name: str,
+    embeddings_type: str,          # "image"  or  "text"
+    embeddings_source,             # path to an image  OR  a string
+    pool: str = "mean"             # "mean" (default) or "cls"
+) -> np.ndarray:
+    """
+    Produce a 768‑dim SigLIP embedding for either an image or a text string.
+
+    Parameters
+    ----------
+    model_name : str
+        Hugging‑Face checkpoint (e.g. "google/siglip-base-patch16-224").
+    embeddings_type : str
+        One of "image" or "text".
+    embeddings_source : str
+        If `embeddings_type=="image"` – path to a local image file.
+        If `embeddings_type=="text"`  – the literal text string.
+    pool : str, optional
+        How to collapse the token‑level output.
+        * "mean" – average over all tokens.
+        * "cls"  – take the CLS‑style pooled output (if the model provides it).
+
+    Returns
+    -------
+    np.ndarray
+        Normalized (L2‑unit) 768‑dim vector ready for a vector DB.
+    """
+
+    processor = AutoProcessor.from_pretrained(model_name)
+    model     = AutoModel.from_pretrained(model_name).eval()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model   = model.to(device)
+
+    if embeddings_type == "image":
+
+        img = Image.open(embeddings_source).convert("RGB")
+        inputs = processor(images=img, return_tensors="pt").to(device)
+
+        with torch.no_grad():
+            out = model.get_image_features(**inputs)
+
+        if pool == "mean":
+            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
+        elif pool == "cls":
+            vec = out.pooler_output.squeeze(0)                   # (768,)
+        else:
+            raise ValueError(f"Unsupported pool option: {pool}")
+
+    elif embeddings_type == "text":
+
+        inputs = processor(text=embeddings_source, return_tensors="pt").to(device)
+
+        with torch.no_grad():
+            out = model.get_text_features(**inputs)
+
+        if pool == "mean":
+            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
+        elif pool == "cls":
+            vec = out.pooler_output.squeeze(0)                   # (768,)
+        else:
+            raise ValueError(f"Unsupported pool option: {pool}")
+
+    else:
+        raise ValueError(f"embeddings_type must be 'image' or 'text', got {embeddings_type!r}")
+
+    vec = torch.nn.functional.normalize(vec, p=2, dim=0)
+    return vec.cpu().numpy()
+
+if __name__ == "__main__":
+
+    vec_img = get_embedding(
+        model_name="google/siglip-base-patch16-224",
+        embeddings_type="image",
+        embeddings_source="hippo.png",
+        pool="mean"          # or "cls"
+    )
+    
+    vec_txt = get_embedding(
+        model_name="google/siglip-base-patch16-224",
+        embeddings_type="text",
+        embeddings_source="a scenic mountain landscape",
+        pool="cls"           # or "mean"
+    )
+    
+    print("Image vec shape:", vec_img)   # (768,)
+    print("Text  vec shape:", vec_txt)   # (768,)
+    

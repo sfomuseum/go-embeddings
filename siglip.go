@@ -1,0 +1,150 @@
+package embeddings
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+)
+
+type SigLIPEmbedder[T Float] struct {
+	Embedder[T]
+	embeddings_py string
+	model         string
+	precision     string
+}
+
+func init() {
+	ctx := context.Background()
+	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPEmbedder)
+	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPEmbedder)
+}
+
+func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
+
+	u, err := url.Parse(uri)
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to parse URI, %w", err)
+	}
+
+	embeddings_py := u.Path
+
+	_, err = os.Stat(embeddings_py)
+
+	if err != nil {
+		return nil, err
+	}
+
+	q := u.Query()
+
+	model := q.Get("model")
+
+	precision := "float64"
+
+	if strings.HasSuffix(u.Scheme, "32") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
+	}
+
+	e := &SigLIPEmbedder[T]{
+		embeddings_py: embeddings_py,
+		precision:     precision,
+		model:         model,
+	}
+
+	return e, nil
+}
+
+func (e *SigLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+	return e.generate_embeddings(ctx, req, "text", string(req.Body))
+}
+
+func (e *SigLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+
+	tmp, err := os.CreateTemp("", "mlxclip.*.img")
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create tmp file, %w", err)
+	}
+
+	defer os.Remove(tmp.Name()) // clean up
+
+	_, err = tmp.Write(req.Body)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = tmp.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return e.generate_embeddings(ctx, req, "image", tmp.Name())
+}
+
+func (e *SigLIPEmbedder[T]) generate_embeddings(ctx context.Context, req *EmbeddingsRequest, target string, input string) (EmbeddingsResponse[T], error) {
+
+	tmp, err := os.CreateTemp("", "siglip.*.json")
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create tmp file, %w", err)
+	}
+
+	defer os.Remove(tmp.Name())
+
+	err = tmp.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, "python3", e.embeddings_py, target, input, tmp.Name())
+	err = cmd.Run()
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to derive embeddings, %w", err)
+	}
+
+	r, err := os.Open(tmp.Name())
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer r.Close()
+
+	var e64 []float64
+
+	dec := json.NewDecoder(r)
+	err = dec.Decode(&e64)
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w (%s)", err, tmp.Name())
+	}
+
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonPrecision: e.precision,
+		CommonCreated:   ts,
+		CommonModel:     "siglip",
+	}
+
+	switch {
+	case strings.HasSuffix(e.precision, "32"):
+		rsp.CommonEmbeddings = toFloat32Slice[T](AsFloat32(e64))
+	default:
+		rsp.CommonEmbeddings = toFloat64Slice[T](e64)
+	}
+
+	return rsp, nil
+}
