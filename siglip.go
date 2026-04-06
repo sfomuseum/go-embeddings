@@ -111,7 +111,15 @@ func (e *SigLIPEmbedder[T]) generate_embeddings(ctx context.Context, req *Embedd
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", e.embeddings_py, target, input, tmp.Name())
+	args := []string{
+		"python3", e.embeddings_py,
+		"--model_name", e.model,
+		"--embeddings_type", target,
+		"--embeddings_source", input,
+		"--embeddings-output", tmp.Name(),
+	}
+	
+	cmd := exec.CommandContext(ctx, args...)
 	err = cmd.Run()
 
 	if err != nil {
