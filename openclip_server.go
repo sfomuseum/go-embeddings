@@ -8,7 +8,7 @@ import (
 )
 
 //go:embed openclip_server.txt
-var f embed.FS
+var openclip_fs embed.FS
 
 func StartOpenCLIPServer(ctx context.Context) error {
 	return NotImplemented

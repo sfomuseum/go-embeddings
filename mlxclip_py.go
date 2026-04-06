@@ -7,4 +7,4 @@ import (
 )
 
 //go:embed mlxclip_py.txt
-var f embed.FS
+var mlxclip_fs embed.FS
