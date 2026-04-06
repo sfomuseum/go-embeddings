@@ -1,4 +1,4 @@
-//go:build mobileclip
+//go:build siglip
 
 package embeddings
 
@@ -9,19 +9,18 @@ import (
 	"testing"
 )
 
-func TestMobileCLIPEmbeddings(t *testing.T) {
+func TestSigLIPEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080")
+	emb, err := NewEmbedder32(ctx, "siglip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
 	}
 
 	req := &EmbeddingsRequest{
-		Body:  []byte("Hello world"),
-		Model: "s0",
+		Body: []byte("Hello world"),
 	}
 
 	rsp, err := emb.TextEmbeddings(ctx, req)
@@ -35,11 +34,11 @@ func TestMobileCLIPEmbeddings(t *testing.T) {
 	}
 }
 
-func TestMobileCLIPImageEmbeddings(t *testing.T) {
+func TestSigLIPImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder32(ctx, "mobileclip://?client-uri=grpc://localhost:8080")
+	emb, err := NewEmbedder32(ctx, "siglip://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -62,8 +61,7 @@ func TestMobileCLIPImageEmbeddings(t *testing.T) {
 	}
 
 	req := &EmbeddingsRequest{
-		Body:  im_body,
-		Model: "s1",
+		Body: im_body,
 	}
 
 	rsp, err := emb.ImageEmbeddings(ctx, req)

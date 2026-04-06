@@ -16,8 +16,8 @@ github.com/sfomuseum/go-encoderfile v0.0.1 h1:ht0GYR0b/KuljcmPIas5/0/nGNKxl9h/Te
 github.com/sfomuseum/go-encoderfile v0.0.1/go.mod h1:zFc9CxM/uEW2vXN6Wk9Zy1aEz3PdXlJVvx8Nzslbe8g=
 github.com/sfomuseum/go-flags v0.12.1 h1:xvg3iEz510JPr9ItPxOOF2C12JnlplodT1V/1Ty7Pg8=
 github.com/sfomuseum/go-flags v0.12.1/go.mod h1:cUTByyudaM9d+iHwxsEpyYHemWVOGL/bqTRPIvydiC8=
-github.com/sfomuseum/go-mobileclip v0.1.1 h1:65i3KlJSYOQn+jPug59T6n6V1nL9vv7ZN4sgr0BOod4=
-github.com/sfomuseum/go-mobileclip v0.1.1/go.mod h1:er2AvdqW/iyBZrn7l9XAvabYFVBKXvr0kkDwfOrBofo=
+github.com/sfomuseum/go-mobileclip v0.1.2 h1:e3a8wwYj6Z9fQq60LmT8F+K2u5oDykXHjFrUfUGPvUE=
+github.com/sfomuseum/go-mobileclip v0.1.2/go.mod h1:8DLg9esYfDrhUCjPxGFjQIO/2VoK2pgrbJ2/SlxbLFg=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/otel v1.39.0 h1:8yPrr/S0ND9QEfTfdP9V+SiwT4E0G7Y5MO7p85nis48=

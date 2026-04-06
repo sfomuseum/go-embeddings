@@ -1,0 +1,141 @@
+#!./bin/python
+
+from transformers import AutoProcessor, AutoModel
+import torch
+from PIL import Image
+
+def get_embedding(
+    model_name: str,
+    embeddings_type: str,          # "image"  or  "text"
+    embeddings_source,             # path to an image  OR  a string
+    pool: str = "mean"             # "mean" (default) or "cls"
+) -> np.ndarray:
+    """
+    Produce a 768‑dim SigLIP embedding for either an image or a text string.
+
+    Parameters
+    ----------
+    model_name : str
+        Hugging‑Face checkpoint (e.g. "google/siglip-base-patch16-224").
+    embeddings_type : str
+        One of "image" or "text".
+    embeddings_source : str
+        If `embeddings_type=="image"` – path to a local image file.
+        If `embeddings_type=="text"`  – the literal text string.
+    pool : str, optional
+        How to collapse the token‑level output.
+        * "mean" – average over all tokens.
+        * "cls"  – take the CLS‑style pooled output (if the model provides it).
+
+    Returns
+    -------
+    np.ndarray
+        Normalized (L2‑unit) 768‑dim vector ready for a vector DB.
+    """
+
+    processor = AutoProcessor.from_pretrained(model_name)
+    model     = AutoModel.from_pretrained(model_name).eval()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model   = model.to(device)
+
+    if embeddings_type == "image":
+
+        img = Image.open(embeddings_source).convert("RGB")
+        inputs = processor(images=img, return_tensors="pt").to(device)
+
+        with torch.no_grad():
+            out = model.get_image_features(**inputs)
+
+        if pool == "mean":
+            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
+        elif pool == "cls":
+            vec = out.pooler_output.squeeze(0)                   # (768,)
+        else:
+            raise ValueError(f"Unsupported pool option: {pool}")
+
+    elif embeddings_type == "text":
+
+        inputs = processor(text=embeddings_source, return_tensors="pt").to(device)
+
+        with torch.no_grad():
+            out = model.get_text_features(**inputs)
+
+        if pool == "mean":
+            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
+        elif pool == "cls":
+            vec = out.pooler_output.squeeze(0)                   # (768,)
+        else:
+            raise ValueError(f"Unsupported pool option: {pool}")
+
+    else:
+        raise ValueError(f"embeddings_type must be 'image' or 'text', got {embeddings_type!r}")
+
+    vec = torch.nn.functional.normalize(vec, p=2, dim=0)
+    return vec.cpu().numpy()
+
+if __name__ == "__main__":
+
+    import optparse
+    import sys
+    
+    parser = optparse.OptionParser(
+        description="Generate a SigLIP embedding from an image or text.",
+        usage="%(prog)s --model_name MODEL --embeddings_type TYPE "
+        "--embeddings_source SRC [--pool POOL]",
+    )
+    
+    parser.add_option(
+        "--model_name",
+        dest="model_name",
+        help="HuggingFace model checkpoint (e.g. google/siglip-base-patch16-224)",
+    )
+    parser.add_option(
+        "--embeddings_type",
+        dest="embeddings_type",
+        help="Either 'image' or 'text'",
+    )
+    parser.add_option(
+        "--embeddings_source",
+        dest="embeddings_source",
+        help="Path to an image file (for image) or a literal string (for text)",
+    )
+    parser.add_option(
+        "--embeddings_output",
+        dest="embeddings_output",
+        help="",
+    )    
+    parser.add_option(
+        "--pool",
+        dest="pool",
+        default="mean",
+        help="How to collapse token embeddings: 'mean' or 'cls' (default: mean)",
+    )
+
+    opts, args = parser.parse_args(sys.argv)
+
+    if not opts.model_name:
+        parser.error("The --model_name argument is required.")
+        
+    if opts.embeddings_type not in ("image", "text"):
+        parser.error("The --embeddings_type argument must be 'image' or 'text'.")
+        
+    if not opts.embeddings_source:
+        parser.error("The --embeddings_source argument is required.")
+
+    if not opts.embeddings_output:
+        parser.error("The --embeddings_output argument is required.")
+
+    if opts.pool not in ("mean", "cls"):
+        parser.error("The --pool argument must be 'mean' or 'cls'.")
+
+    rsp = get_embedding(
+        model_name=opts.model_name,
+        embeddings_type=opts.embeddings_type,
+        embeddings_source=opts.embeddings_source,
+        pool=opts.pool,
+    )
+
+    with open(opts.embeddings_output, "w") as wr:
+    	 json.dump(rsp.tolist(), wr)
+

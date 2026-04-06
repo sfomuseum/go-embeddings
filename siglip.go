@@ -1,5 +1,7 @@
 package embeddings
 
+// https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md
+
 import (
 	"context"
 	"encoding/json"
@@ -12,21 +14,22 @@ import (
 	"time"
 )
 
-type MLXClipEmbedder[T Float] struct {
+type SigLIPEmbedder[T Float] struct {
 	Embedder[T]
 	python string
 	embeddings_py string
+	model         string
 	precision     string
 }
 
 func init() {
 	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "mlxclip", NewMLXClipEmbedder)
-	RegisterEmbedder[float32](ctx, "mlxclip32", NewMLXClipEmbedder)
-	RegisterEmbedder[float64](ctx, "mlxclip64", NewMLXClipEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPEmbedder)
+	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPEmbedder)
 }
 
-func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
+func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -41,17 +44,11 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	_, err = os.Stat(embeddings_py)
 
 	if err != nil {
 		return nil, err
-	}
-
-	precision := "float64"
-
-	if strings.HasSuffix(u.Scheme, "32") {
-		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
 	}
 
 	python := "python"
@@ -72,23 +69,36 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 
 		python = abs_python
 	}
-		
-	e := &MLXClipEmbedder[T]{
+	
+	if !q.Has("model") {
+		return nil, fmt.Errorf("Required model (HuggingFace checkpoint URI) missing.")
+	}
+
+	model := q.Get("model")
+
+	precision := "float32"
+
+	if strings.HasSuffix(u.Scheme, "64") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
+	}
+
+	e := &SigLIPEmbedder[T]{
 		python: python,
 		embeddings_py: embeddings_py,
 		precision:     precision,
+		model:         model,
 	}
 
 	return e, nil
 }
 
-func (e *MLXClipEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+func (e *SigLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 	return e.generate_embeddings(ctx, req, "text", string(req.Body))
 }
 
-func (e *MLXClipEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+func (e *SigLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	tmp, err := os.CreateTemp("", "mlxclip.*.img")
+	tmp, err := os.CreateTemp("", "siglip.*.img")
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tmp file, %w", err)
@@ -111,9 +121,9 @@ func (e *MLXClipEmbedder[T]) ImageEmbeddings(ctx context.Context, req *Embedding
 	return e.generate_embeddings(ctx, req, "image", tmp.Name())
 }
 
-func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *EmbeddingsRequest, target string, input string) (EmbeddingsResponse[T], error) {
+func (e *SigLIPEmbedder[T]) generate_embeddings(ctx context.Context, req *EmbeddingsRequest, target string, input string) (EmbeddingsResponse[T], error) {
 
-	tmp, err := os.CreateTemp("", "mlxclip.*.json")
+	tmp, err := os.CreateTemp("", "siglip.*.json")
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tmp file, %w", err)
@@ -129,11 +139,12 @@ func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *Embed
 
 	args := []string{
 		e.embeddings_py,
-		target,
-		input,
-		tmp.Name(),
+		"--model_name", e.model,
+		"--embeddings_type", target,
+		"--embeddings_source", input,
+		"--embeddings_output", tmp.Name(),
 	}
-	
+
 	cmd := exec.CommandContext(ctx, e.python, args...)
 	err = cmd.Run()
 
@@ -165,7 +176,7 @@ func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *Embed
 		CommonId:        req.Id,
 		CommonPrecision: e.precision,
 		CommonCreated:   ts,
-		CommonModel:     "mlxclip",
+		CommonModel:     e.model,
 	}
 
 	switch {

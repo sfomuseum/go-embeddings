@@ -204,8 +204,14 @@ Derive vector embeddings from a Python script using the [harperreed/mlx_clip](ht
 The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
 
 ```
-mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}
+mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}?{PARAMETERS}
 ```
+
+Valid query parameters are:
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| python | string | no | The path to the Python runtime to use. For example one created by a Python virtual environment. |
 
 #### Set up
 
@@ -298,9 +304,53 @@ INFO:werkzeug:WARNING: This is a development server. Do not use it in a producti
 INFO:werkzeug:Press CTRL+C to quit
 ```
 
+### siglip://
+
+Derive vector embeddings from a Python script using the Google [SigLIP (2)](https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md) models.
+
+```
+siglib://{OPTIONAL_HOST}{PATH_TO_EMBEDDINGS_DOT_PY}?{PARAMETERS}
+```
+
+Valid query parameters are:
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| model | string | yes | The HuggingFace checkpoint URI of the model to use. For example "google/siglip-so400m-patch14-384" |
+| python | string | no | The path to the Python runtime to use. For example one created by a Python virtual environment. |
+
+#### Set up
+
+Set up is not yet automated so you'll need to do something like this:
+
+```
+$> cd /usr/local/src
+$> python -m venv siglip
+$> cd siglip/
+$> bash bin/activate
+$> bin/pip install torch transformers pillow protobuf SentencePiece
+```
+
+Then, copy the included code in [siglip_py.txt](siglip_py.txt) in to a file called `embeddings.py` (or whatever you choose). Putting it all together the URI to create a new `Embedder` intance would be:
+
+```
+siglip:///usr/local/src/siglip/embeddings.py?model=google/siglip-base-patch16-224&python=/usr/local/src/siglip/bin/python
+```
+
+_Note how the Python runtime created in the virtual environment is specified in the `?python=` query parameter._
+
+And then putting it altogether with the `bin/embeddings` tool described above:
+
+```
+$> echo "Hello world" | ./bin/embeddings -client-uri 'siglip://venv/usr/local/src/siglip/embeddings.py?model=google/siglip-base-patch16-224&python=/usr/local/src/siglip/bin/python' text -
+{"embeddings":[0.010030805,-0.02573614,0.029724538,... and so on
+```
+
 #### See also
 
-* https://github.com/mlfoundations/open_clip
+* https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md
+* https://huggingface.co/google/siglip-base-patch16-224
+* https://huggingface.co/google/siglip-so400m-patch14-384
 
 ## Tests
 
@@ -314,3 +364,4 @@ Because so many of the implementations above depend on the availability of exter
 | mobileclip:// | mobileclip |
 | ollama:// | ollama |
 | openclip:// | openclip |
+| siglip:// | siglip |

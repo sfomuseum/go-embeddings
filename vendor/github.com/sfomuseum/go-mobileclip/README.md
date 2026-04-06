@@ -33,7 +33,7 @@ func main() {
 		Body: body,
 	}
 
-	embeddings, _ := req.ComputeImageEmbeddings(ctx, req)
+	embeddings, _ := cl.ComputeImageEmbeddings(ctx, req)
 }
 ```
 
