@@ -1,3 +1,5 @@
+#!./bin/python
+
 from transformers import AutoProcessor, AutoModel
 import torch
 from PIL import Image

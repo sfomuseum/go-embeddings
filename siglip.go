@@ -9,12 +9,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 type SigLIPEmbedder[T Float] struct {
 	Embedder[T]
+	python string
 	embeddings_py string
 	model         string
 	precision     string
@@ -35,7 +37,13 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 		return nil, fmt.Errorf("Failed to parse URI, %w", err)
 	}
 
-	embeddings_py := u.Path
+	q := u.Query()
+	
+	embeddings_py, err := filepath.Abs(u.Path)
+
+	if err != nil {
+		return nil, err
+	}
 
 	_, err = os.Stat(embeddings_py)
 
@@ -43,21 +51,39 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 		return nil, err
 	}
 
-	q := u.Query()
+	python := "python"
 
-	if !q.Has("model"){
-		return nil, fmt.Errorf("Required model (HuggingFace checkpoint URI) missing.")
+	if q.Has("python") {
+
+		abs_python, err := filepath.Abs(q.Get("python"))
+
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = os.Stat(abs_python)
+
+		if err != nil {
+			return nil, err
+		}
+
+		python = abs_python
 	}
 	
+	if !q.Has("model") {
+		return nil, fmt.Errorf("Required model (HuggingFace checkpoint URI) missing.")
+	}
+
 	model := q.Get("model")
 
-	precision := "float64"
+	precision := "float32"
 
-	if strings.HasSuffix(u.Scheme, "32") {
-		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
+	if strings.HasSuffix(u.Scheme, "64") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
 	}
 
 	e := &SigLIPEmbedder[T]{
+		python: python,
 		embeddings_py: embeddings_py,
 		precision:     precision,
 		model:         model,
@@ -72,7 +98,7 @@ func (e *SigLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsR
 
 func (e *SigLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	tmp, err := os.CreateTemp("", "mlxclip.*.img")
+	tmp, err := os.CreateTemp("", "siglip.*.img")
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tmp file, %w", err)
@@ -112,14 +138,14 @@ func (e *SigLIPEmbedder[T]) generate_embeddings(ctx context.Context, req *Embedd
 	}
 
 	args := []string{
-		"python3", e.embeddings_py,
+		e.embeddings_py,
 		"--model_name", e.model,
 		"--embeddings_type", target,
 		"--embeddings_source", input,
-		"--embeddings-output", tmp.Name(),
+		"--embeddings_output", tmp.Name(),
 	}
-	
-	cmd := exec.CommandContext(ctx, args...)
+
+	cmd := exec.CommandContext(ctx, e.python, args...)
 	err = cmd.Run()
 
 	if err != nil {

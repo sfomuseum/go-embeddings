@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 type MLXClipEmbedder[T Float] struct {
 	Embedder[T]
+	python string
 	embeddings_py string
 	precision     string
 }
@@ -32,8 +34,14 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 		return nil, fmt.Errorf("Failed to parse URI, %w", err)
 	}
 
-	embeddings_py := u.Path
+	q := u.Query()
+	
+	embeddings_py, err := filepath.Abs(u.Path)
 
+	if err != nil {
+		return nil, err
+	}
+	
 	_, err = os.Stat(embeddings_py)
 
 	if err != nil {
@@ -46,7 +54,27 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
 	}
 
+	python := "python"
+
+	if q.Has("python") {
+
+		abs_python, err := filepath.Abs(q.Get("python"))
+
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = os.Stat(abs_python)
+
+		if err != nil {
+			return nil, err
+		}
+
+		python = abs_python
+	}
+		
 	e := &MLXClipEmbedder[T]{
+		python: python,
 		embeddings_py: embeddings_py,
 		precision:     precision,
 	}
@@ -99,7 +127,14 @@ func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *Embed
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", e.embeddings_py, target, input, tmp.Name())
+	args := []string{
+		e.embeddings_py,
+		target,
+		input,
+		tmp.Name(),
+	}
+	
+	cmd := exec.CommandContext(ctx, e.python, args...)
 	err = cmd.Run()
 
 	if err != nil {
