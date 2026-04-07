@@ -40,7 +40,7 @@ def embeddings():
     rsp =  vec.cpu().numpy()
 
     embeddings = rsp.tolist()
-    return jsonify({"embedding": embeddings})
+    return jsonify({"embedding": embeddings, "model": model_name})
     
     
 @app.route("/embeddings/image", methods=['POST'])
@@ -73,4 +73,4 @@ def embeddings_image():
         rsp = vec.cpu().numpy()
         
         embeddings = rsp.tolist()
-        return jsonify({"embedding": embeddings})
+        return jsonify({"embedding": embeddings, "model": model_name})
