@@ -1,43 +1,28 @@
 package embeddings
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
-	"log/slog"
-	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
+	"time"
 )
 
-type SIGLipImageDataEmbeddingRequest struct {
-	Id   int64  `json:"id"`
-	Data string `json:"data"`
+type SigLIPLocalClientEmbedder[T Float] struct {
+	Embedder[T]
+	client    *LocalClient
+	precision string
 }
 
-type SIGLipEmbeddingRequest struct {
-	Content   string                             `json:"content,omitempty"`
-	ImageData []*SIGLipImageDataEmbeddingRequest `json:"image_data,omitempty"`
+func init() {
+	ctx := context.Background()
+	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPLocalClientEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPLocalClientEmbedder)
+	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPLocalClientEmbedder)
 }
 
-type SIGLipEmbeddingResponse struct {
-	Embeddings []float64 `json:"embedding,omitempty"`
-}
-
-type SIGLipClient struct {
-	client *http.Client
-	host   string
-	port   string
-	tls    bool
-}
-
-func NewSIGLipClient(ctx context.Context, uri string) (*SIGLipClient, error) {
-
-	host := "127.0.0.1"
-	port := "5000"
-	tls := false
+func NewSigLIPLocalClientEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -45,103 +30,90 @@ func NewSIGLipClient(ctx context.Context, uri string) (*SIGLipClient, error) {
 		return nil, err
 	}
 
-	if u.Host != "" {
-		host = u.Host
+	cl, err := NewLocalClient(ctx, uri)
 
-		parts := strings.Split(host, ":")
-
-		if len(parts) < 1 {
-			return nil, fmt.Errorf("Failed to parse host component of URI")
-		}
-
-		host = parts[0]
+	if err != nil {
+		return nil, err
 	}
 
-	if u.Port() != "" {
-		port = u.Port()
+	precision := "float32"
+
+	if strings.HasSuffix(u.Scheme, "64") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
 	}
 
-	slog.Debug("URL", "host", host, "port", port)
-
-	q := u.Query()
-
-	if q.Has("tls") {
-
-		v, err := strconv.ParseBool("tls")
-
-		if err != nil {
-			return nil, fmt.Errorf("Invalid ?tls= parameter, %w", err)
-		}
-
-		tls = v
+	e := &SigLIPLocalClientEmbedder[T]{
+		client:    cl,
+		precision: precision,
 	}
 
-	http_cl := &http.Client{}
-
-	cl := &SIGLipClient{
-		client: http_cl,
-		host:   host,
-		port:   port,
-		tls:    tls,
-	}
-
-	return cl, nil
+	return e, nil
 }
 
-func (e *SIGLipClient) embeddings(ctx context.Context, siglip_req *SIGLipEmbeddingRequest) (*SIGLipEmbeddingResponse, error) {
+func (e *SigLIPLocalClientEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	u := url.URL{}
-	u.Scheme = "http"
-	u.Host = fmt.Sprintf("%s:%s", e.host, e.port)
-
-	if len(siglip_req.ImageData) > 0 {
-		u.Path = "/embeddings/image"
-	} else {
-		u.Path = "/embeddings"
+	cl_req := &LocalEmbeddingRequest{
+		Content: string(req.Body),
 	}
 
-	if e.tls {
-		u.Scheme = "https"
-	}
-
-	endpoint := u.String()
-
-	enc_msg, err := json.Marshal(siglip_req)
+	cl_rsp, err := e.client.embeddings(ctx, cl_req)
 
 	if err != nil {
-		return nil, fmt.Errorf("Failed to encode message, %w", err)
+		return nil, err
 	}
 
-	br := bytes.NewReader(enc_msg)
+	rsp := e.localResponseToEmbeddingsResponse(req, cl_rsp)
+	return rsp, nil
+}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, br)
+func (e *SigLIPLocalClientEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+
+	data_b64 := base64.StdEncoding.EncodeToString(req.Body)
+
+	now := time.Now()
+	ts := now.Unix()
+
+	image_req := &LocalImageDataEmbeddingRequest{
+		Data: data_b64,
+		Id:   ts,
+	}
+
+	cl_req := &LocalEmbeddingRequest{
+		ImageData: []*LocalImageDataEmbeddingRequest{
+			image_req,
+		},
+	}
+
+	cl_rsp, err := e.client.embeddings(ctx, cl_req)
 
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create new request, %w", err)
+		return nil, err
 	}
 
-	req.Header.Set("Content-type", "application/json")
+	rsp := e.localResponseToEmbeddingsResponse(req, cl_rsp)
+	return rsp, nil
+}
 
-	rsp, err := e.client.Do(req)
+func (e *SigLIPLocalClientEmbedder[T]) localResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *LocalEmbeddingResponse) EmbeddingsResponse[T] {
 
-	if err != nil {
-		return nil, fmt.Errorf("Failed to execute request, %w", err)
+	now := time.Now()
+	ts := now.Unix()
+
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonPrecision: e.precision,
+		CommonCreated:   ts,
+		CommonModel:     cl_rsp.Model,
 	}
 
-	defer rsp.Body.Close()
+	e64 := cl_rsp.Embeddings
 
-	if rsp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Embeddings request failed %d: %s", rsp.StatusCode, rsp.Status)
+	switch {
+	case strings.HasSuffix(e.precision, "32"):
+		rsp.CommonEmbeddings = toFloat32Slice[T](AsFloat32(e64))
+	default:
+		rsp.CommonEmbeddings = toFloat64Slice[T](e64)
 	}
 
-	var siglip_rsp *SIGLipEmbeddingResponse
-
-	dec := json.NewDecoder(rsp.Body)
-	err = dec.Decode(&siglip_rsp)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w", err)
-	}
-
-	return siglip_rsp, nil
+	return rsp
 }
