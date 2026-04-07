@@ -1,30 +1,28 @@
 package embeddings
 
-// https://github.com/mlfoundations/open_clip
-
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
 )
 
-// OpenCLIPEmbedder implements the `Embedder` interface using an OpenCLIP API endpoint to derive embeddings.
-type OpenCLIPEmbedder[T Float] struct {
+func init() {
+	ctx := context.Background()
+	RegisterEmbedder[float32](ctx, "siglip-client", NewSigLIPLocalClientEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip-client32", NewSigLIPLocalClientEmbedder)
+	RegisterEmbedder[float64](ctx, "siglip-client64", NewSigLIPLocalClientEmbedder)
+}
+
+type SigLIPLocalClientEmbedder[T Float] struct {
 	Embedder[T]
 	client    *LocalClient
 	precision string
 }
 
-func init() {
-	ctx := context.Background()
-	RegisterEmbedder[float64](ctx, "openclip", NewOpenCLIPEmbedder)
-	RegisterEmbedder[float32](ctx, "openclip32", NewOpenCLIPEmbedder)
-	RegisterEmbedder[float64](ctx, "openclip64", NewOpenCLIPEmbedder)
-}
-
-func NewOpenCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
+func NewSigLIPLocalClientEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -39,21 +37,28 @@ func NewOpenCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T],
 	if q.Has("client-uri") {
 		client_uri = q.Get("client-uri")
 	}
-
-	local_cl, err := NewLocalClient(ctx, client_uri)
+	
+	cl, err := NewLocalClient(ctx, client_uri)
 
 	if err != nil {
 		return nil, err
 	}
 
-	e := &OpenCLIPEmbedder[T]{
-		client: local_cl,
+	precision := "float32"
+
+	if strings.HasSuffix(u.Scheme, "64") {
+		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
+	}
+
+	e := &SigLIPLocalClientEmbedder[T]{
+		client:    cl,
+		precision: precision,
 	}
 
 	return e, nil
 }
 
-func (e *OpenCLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+func (e *SigLIPLocalClientEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	cl_req := &LocalClientEmbeddingRequest{
 		Content: string(req.Body),
@@ -69,7 +74,7 @@ func (e *OpenCLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *Embedding
 	return rsp, nil
 }
 
-func (e *OpenCLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+func (e *SigLIPLocalClientEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	data_b64 := base64.StdEncoding.EncodeToString(req.Body)
 
@@ -97,7 +102,7 @@ func (e *OpenCLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *Embeddin
 	return rsp, nil
 }
 
-func (e *OpenCLIPEmbedder[T]) localClientResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *LocalClientEmbeddingResponse) EmbeddingsResponse[T] {
+func (e *SigLIPLocalClientEmbedder[T]) localClientResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *LocalClientEmbeddingResponse) EmbeddingsResponse[T] {
 
 	now := time.Now()
 	ts := now.Unix()
@@ -106,7 +111,7 @@ func (e *OpenCLIPEmbedder[T]) localClientResponseToEmbeddingsResponse(req *Embed
 		CommonId:        req.Id,
 		CommonPrecision: e.precision,
 		CommonCreated:   ts,
-		CommonModel:     "openclip",
+		CommonModel:     cl_rsp.Model,
 	}
 
 	e64 := cl_rsp.Embeddings

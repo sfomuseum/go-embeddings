@@ -1,0 +1,76 @@
+import tempfile
+import base64
+import os
+
+from flask import Flask, request, jsonify
+
+from transformers import AutoProcessor, AutoModel
+import torch
+from PIL import Image
+
+model_name = "google/siglip-base-patch16-224"
+pool = "mean"
+
+processor = AutoProcessor.from_pretrained(model_name)
+model     = AutoModel.from_pretrained(model_name).eval()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model   = model.to(device)
+
+app = Flask(__name__)
+
+@app.route("/embeddings", methods=['POST'])
+def embeddings():
+
+    req = request.json
+
+    inputs = processor(text=req["content"], return_tensors="pt").to(device)
+    
+    with torch.no_grad():
+        out = model.get_text_features(**inputs)
+        
+        if pool == "mean":
+            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
+        elif pool == "cls":
+            vec = out.pooler_output.squeeze(0)                   # (768,)
+        else:
+            raise ValueError(f"Unsupported pool option: {pool}")
+        
+    vec = torch.nn.functional.normalize(vec, p=2, dim=0)
+    rsp =  vec.cpu().numpy()
+
+    embeddings = rsp.tolist()
+    return jsonify({"embedding": embeddings, "model": model_name})
+    
+    
+@app.route("/embeddings/image", methods=['POST'])
+def embeddings_image():
+
+    req = request.json
+    body = base64.b64decode(req["image_data"][0]["data"])
+
+    with tempfile.NamedTemporaryFile(delete_on_close=False, mode="wb") as wr:
+
+        wr.write(body)
+        wr.close()
+
+        img = Image.open(wr.name).convert("RGB")
+        os.remove(wr.name)
+        
+        inputs = processor(images=img, return_tensors="pt").to(device)
+
+        with torch.no_grad():
+            out = model.get_image_features(**inputs)
+
+        if pool == "mean":
+            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
+        elif pool == "cls":
+            vec = out.pooler_output.squeeze(0)                   # (768,)
+        else:
+            raise ValueError(f"Unsupported pool option: {pool}")
+
+        vec = torch.nn.functional.normalize(vec, p=2, dim=0)
+        rsp = vec.cpu().numpy()
+        
+        embeddings = rsp.tolist()
+        return jsonify({"embedding": embeddings, "model": model_name})

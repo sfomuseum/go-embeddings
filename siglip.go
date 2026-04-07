@@ -1,7 +1,5 @@
 package embeddings
 
-// https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md
-
 import (
 	"context"
 	"encoding/json"
@@ -14,22 +12,22 @@ import (
 	"time"
 )
 
-type SigLIPEmbedder[T Float] struct {
+func init() {
+	ctx := context.Background()
+	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPCommandLineEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPCommandLineEmbedder)
+	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPCommandLineEmbedder)
+}
+
+type SigLIPCommandLineEmbedder[T Float] struct {
 	Embedder[T]
-	python string
+	python        string
 	embeddings_py string
 	model         string
 	precision     string
 }
 
-func init() {
-	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPEmbedder)
-	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPEmbedder)
-	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPEmbedder)
-}
-
-func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
+func NewSigLIPCommandLineEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
 
@@ -38,7 +36,7 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 	}
 
 	q := u.Query()
-	
+
 	embeddings_py, err := filepath.Abs(u.Path)
 
 	if err != nil {
@@ -69,7 +67,7 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 
 		python = abs_python
 	}
-	
+
 	if !q.Has("model") {
 		return nil, fmt.Errorf("Required model (HuggingFace checkpoint URI) missing.")
 	}
@@ -82,8 +80,8 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
 	}
 
-	e := &SigLIPEmbedder[T]{
-		python: python,
+	e := &SigLIPCommandLineEmbedder[T]{
+		python:        python,
 		embeddings_py: embeddings_py,
 		precision:     precision,
 		model:         model,
@@ -92,11 +90,12 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 	return e, nil
 }
 
-func (e *SigLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
-	return e.generate_embeddings(ctx, req, "text", string(req.Body))
+func (e *SigLIPCommandLineEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+
+	return e.generateEmbeddingsFromCommandLine(ctx, req, "text", string(req.Body))
 }
 
-func (e *SigLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+func (e *SigLIPCommandLineEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	tmp, err := os.CreateTemp("", "siglip.*.img")
 
@@ -118,10 +117,10 @@ func (e *SigLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *Embeddings
 		return nil, err
 	}
 
-	return e.generate_embeddings(ctx, req, "image", tmp.Name())
+	return e.generateEmbeddingsFromCommandLine(ctx, req, "image", tmp.Name())
 }
 
-func (e *SigLIPEmbedder[T]) generate_embeddings(ctx context.Context, req *EmbeddingsRequest, target string, input string) (EmbeddingsResponse[T], error) {
+func (e *SigLIPCommandLineEmbedder[T]) generateEmbeddingsFromCommandLine(ctx context.Context, req *EmbeddingsRequest, target string, input string) (EmbeddingsResponse[T], error) {
 
 	tmp, err := os.CreateTemp("", "siglip.*.json")
 
