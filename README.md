@@ -278,7 +278,7 @@ openclip://?{PARAMETERS}
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:8080`. |
+| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
 
 #### Set up
 
@@ -364,13 +364,22 @@ WARNING: This is a development server. Do not use it in a production deployment.
 Press CTRL+C to quit
 ```
 
+_Note: As of this writing the included server code only supports a single SigLIP model. The default value is `google/siglip-base-patch16-224`. If you want to use a different model you will need to change it manually._
+
 The URI to create a new `Embedder` instance with this server would be:
 
 ```
-siglip-client://{HOST}:{PORT}
+siglip-client://?{PARAMTERS}
 ```
 
-The default value for `{HOST}` and `{PORT}` are "localhost" and "5000", respectively. For example:
+Valid parameters are:
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
+
+
+For example:
 
 ```
 $> ./bin/embeddings -client-uri 'siglip-client://' image test.pmg

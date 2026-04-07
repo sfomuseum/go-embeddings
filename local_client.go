@@ -1,5 +1,8 @@
 package embeddings
 
+// For talking to the simple HTTP "server" wrappers for non-Go embeddings interface.
+// Typically these are Flask-based servers.
+
 import (
 	"bytes"
 	"context"
@@ -12,17 +15,17 @@ import (
 	"strings"
 )
 
-type LocalImageDataEmbeddingRequest struct {
+type LocalClientImageDataEmbeddingRequest struct {
 	Id   int64  `json:"id"`
 	Data string `json:"data"`
 }
 
-type LocalEmbeddingRequest struct {
-	Content   string                            `json:"content,omitempty"`
-	ImageData []*LocalImageDataEmbeddingRequest `json:"image_data,omitempty"`
+type LocalClientEmbeddingRequest struct {
+	Content   string                                  `json:"content,omitempty"`
+	ImageData []*LocalClientImageDataEmbeddingRequest `json:"image_data,omitempty"`
 }
 
-type LocalEmbeddingResponse struct {
+type LocalClientEmbeddingResponse struct {
 	Model      string    `json:"model,omitempty"`
 	Embeddings []float64 `json:"embedding,omitempty"`
 }
@@ -89,13 +92,13 @@ func NewLocalClient(ctx context.Context, uri string) (*LocalClient, error) {
 	return cl, nil
 }
 
-func (e *LocalClient) embeddings(ctx context.Context, siglip_req *LocalEmbeddingRequest) (*LocalEmbeddingResponse, error) {
+func (e *LocalClient) embeddings(ctx context.Context, local_req *LocalClientEmbeddingRequest) (*LocalClientEmbeddingResponse, error) {
 
 	u := url.URL{}
 	u.Scheme = "http"
 	u.Host = fmt.Sprintf("%s:%s", e.host, e.port)
 
-	if len(siglip_req.ImageData) > 0 {
+	if len(local_req.ImageData) > 0 {
 		u.Path = "/embeddings/image"
 	} else {
 		u.Path = "/embeddings"
@@ -107,7 +110,7 @@ func (e *LocalClient) embeddings(ctx context.Context, siglip_req *LocalEmbedding
 
 	endpoint := u.String()
 
-	enc_msg, err := json.Marshal(siglip_req)
+	enc_msg, err := json.Marshal(local_req)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to encode message, %w", err)
@@ -135,7 +138,7 @@ func (e *LocalClient) embeddings(ctx context.Context, siglip_req *LocalEmbedding
 		return nil, fmt.Errorf("Embeddings request failed %d: %s", rsp.StatusCode, rsp.Status)
 	}
 
-	var local_rsp *LocalEmbeddingResponse
+	var local_rsp *LocalClientEmbeddingResponse
 
 	dec := json.NewDecoder(rsp.Body)
 	err = dec.Decode(&local_rsp)

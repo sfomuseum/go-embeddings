@@ -187,27 +187,3 @@ func (e *SigLIPCommandLineEmbedder[T]) generateEmbeddingsFromCommandLine(ctx con
 
 	return rsp, nil
 }
-
-func (e *SigLIPCommandLineEmbedder[T]) localResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *LocalEmbeddingResponse) EmbeddingsResponse[T] {
-
-	now := time.Now()
-	ts := now.Unix()
-
-	rsp := &CommonEmbeddingsResponse[T]{
-		CommonId:        req.Id,
-		CommonPrecision: e.precision,
-		CommonCreated:   ts,
-		CommonModel:     e.model,
-	}
-
-	e64 := cl_rsp.Embeddings
-
-	switch {
-	case strings.HasSuffix(e.precision, "32"):
-		rsp.CommonEmbeddings = toFloat32Slice[T](AsFloat32(e64))
-	default:
-		rsp.CommonEmbeddings = toFloat64Slice[T](e64)
-	}
-
-	return rsp
-}

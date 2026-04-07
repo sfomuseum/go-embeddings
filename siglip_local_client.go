@@ -30,7 +30,15 @@ func NewSigLIPLocalClientEmbedder[T Float](ctx context.Context, uri string) (Emb
 		return nil, err
 	}
 
-	cl, err := NewLocalClient(ctx, uri)
+	q := u.Query()
+
+	client_uri := "http://localhost:5000"
+
+	if q.Has("client-uri") {
+		client_uri = q.Get("client-uri")
+	}
+	
+	cl, err := NewLocalClient(ctx, client_uri)
 
 	if err != nil {
 		return nil, err
@@ -52,7 +60,7 @@ func NewSigLIPLocalClientEmbedder[T Float](ctx context.Context, uri string) (Emb
 
 func (e *SigLIPLocalClientEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	cl_req := &LocalEmbeddingRequest{
+	cl_req := &LocalClientEmbeddingRequest{
 		Content: string(req.Body),
 	}
 
@@ -62,7 +70,7 @@ func (e *SigLIPLocalClientEmbedder[T]) TextEmbeddings(ctx context.Context, req *
 		return nil, err
 	}
 
-	rsp := e.localResponseToEmbeddingsResponse(req, cl_rsp)
+	rsp := e.localClientResponseToEmbeddingsResponse(req, cl_rsp)
 	return rsp, nil
 }
 
@@ -73,13 +81,13 @@ func (e *SigLIPLocalClientEmbedder[T]) ImageEmbeddings(ctx context.Context, req 
 	now := time.Now()
 	ts := now.Unix()
 
-	image_req := &LocalImageDataEmbeddingRequest{
+	image_req := &LocalClientImageDataEmbeddingRequest{
 		Data: data_b64,
 		Id:   ts,
 	}
 
-	cl_req := &LocalEmbeddingRequest{
-		ImageData: []*LocalImageDataEmbeddingRequest{
+	cl_req := &LocalClientEmbeddingRequest{
+		ImageData: []*LocalClientImageDataEmbeddingRequest{
 			image_req,
 		},
 	}
@@ -90,11 +98,11 @@ func (e *SigLIPLocalClientEmbedder[T]) ImageEmbeddings(ctx context.Context, req 
 		return nil, err
 	}
 
-	rsp := e.localResponseToEmbeddingsResponse(req, cl_rsp)
+	rsp := e.localClientResponseToEmbeddingsResponse(req, cl_rsp)
 	return rsp, nil
 }
 
-func (e *SigLIPLocalClientEmbedder[T]) localResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *LocalEmbeddingResponse) EmbeddingsResponse[T] {
+func (e *SigLIPLocalClientEmbedder[T]) localClientResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *LocalClientEmbeddingResponse) EmbeddingsResponse[T] {
 
 	now := time.Now()
 	ts := now.Unix()

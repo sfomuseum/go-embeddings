@@ -13,7 +13,7 @@ import (
 // OpenCLIPEmbedder implements the `Embedder` interface using an OpenCLIP API endpoint to derive embeddings.
 type OpenCLIPEmbedder[T Float] struct {
 	Embedder[T]
-	client    *openCLIPClient
+	client    *LocalClient
 	precision string
 }
 
@@ -40,14 +40,14 @@ func NewOpenCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T],
 		client_uri = q.Get("client-uri")
 	}
 
-	open_cl, err := newOpenCLIPClient(ctx, client_uri)
+	local_cl, err := NewLocalClient(ctx, client_uri)
 
 	if err != nil {
 		return nil, err
 	}
 
 	e := &OpenCLIPEmbedder[T]{
-		client: open_cl,
+		client: local_cl,
 	}
 
 	return e, nil
@@ -55,7 +55,7 @@ func NewOpenCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T],
 
 func (e *OpenCLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	cl_req := &openCLIPEmbeddingRequest{
+	cl_req := &LocalClientEmbeddingRequest{
 		Content: string(req.Body),
 	}
 
@@ -65,7 +65,7 @@ func (e *OpenCLIPEmbedder[T]) TextEmbeddings(ctx context.Context, req *Embedding
 		return nil, err
 	}
 
-	rsp := e.openCLIPResponseToEmbeddingsResponse(req, cl_rsp)
+	rsp := e.localClientResponseToEmbeddingsResponse(req, cl_rsp)
 	return rsp, nil
 }
 
@@ -76,13 +76,13 @@ func (e *OpenCLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *Embeddin
 	now := time.Now()
 	ts := now.Unix()
 
-	image_req := &openCLIPImageDataEmbeddingRequest{
+	image_req := &LocalClientImageDataEmbeddingRequest{
 		Data: data_b64,
 		Id:   ts,
 	}
 
-	cl_req := &openCLIPEmbeddingRequest{
-		ImageData: []*openCLIPImageDataEmbeddingRequest{
+	cl_req := &LocalClientEmbeddingRequest{
+		ImageData: []*LocalClientImageDataEmbeddingRequest{
 			image_req,
 		},
 	}
@@ -93,11 +93,11 @@ func (e *OpenCLIPEmbedder[T]) ImageEmbeddings(ctx context.Context, req *Embeddin
 		return nil, err
 	}
 
-	rsp := e.openCLIPResponseToEmbeddingsResponse(req, cl_rsp)
+	rsp := e.localClientResponseToEmbeddingsResponse(req, cl_rsp)
 	return rsp, nil
 }
 
-func (e *OpenCLIPEmbedder[T]) openCLIPResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *openCLIPEmbeddingResponse) EmbeddingsResponse[T] {
+func (e *OpenCLIPEmbedder[T]) localClientResponseToEmbeddingsResponse(req *EmbeddingsRequest, cl_rsp *LocalClientEmbeddingResponse) EmbeddingsResponse[T] {
 
 	now := time.Now()
 	ts := now.Unix()
