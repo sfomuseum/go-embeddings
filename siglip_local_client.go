@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+func init() {
+	ctx := context.Background()
+	RegisterEmbedder[float32](ctx, "siglip-client", NewSigLIPLocalClientEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip-client32", NewSigLIPLocalClientEmbedder)
+	RegisterEmbedder[float64](ctx, "siglip-client64", NewSigLIPLocalClientEmbedder)
+}
+
 type SigLIPLocalClientEmbedder[T Float] struct {
 	Embedder[T]
 	client    *LocalClient

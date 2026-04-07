@@ -12,6 +12,13 @@ import (
 	"time"
 )
 
+func init() {
+	ctx := context.Background()
+	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPCommandLineEmbedder)
+	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPCommandLineEmbedder)
+	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPCommandLineEmbedder)
+}
+
 type SigLIPCommandLineEmbedder[T Float] struct {
 	Embedder[T]
 	python        string
