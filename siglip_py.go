@@ -6,5 +6,5 @@ import (
 	"embed"
 )
 
-//go:embed siglip_py.txt
+//go:embed siglip_py.txt siglip_server_py.txt
 var siglip_fs embed.FS

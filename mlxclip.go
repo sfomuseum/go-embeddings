@@ -14,7 +14,7 @@ import (
 
 type MLXClipEmbedder[T Float] struct {
 	Embedder[T]
-	python string
+	python        string
 	embeddings_py string
 	precision     string
 }
@@ -35,13 +35,13 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 	}
 
 	q := u.Query()
-	
+
 	embeddings_py, err := filepath.Abs(u.Path)
 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	_, err = os.Stat(embeddings_py)
 
 	if err != nil {
@@ -72,9 +72,9 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 
 		python = abs_python
 	}
-		
+
 	e := &MLXClipEmbedder[T]{
-		python: python,
+		python:        python,
 		embeddings_py: embeddings_py,
 		precision:     precision,
 	}
@@ -133,7 +133,7 @@ func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *Embed
 		input,
 		tmp.Name(),
 	}
-	
+
 	cmd := exec.CommandContext(ctx, e.python, args...)
 	err = cmd.Run()
 

@@ -328,7 +328,7 @@ $> cd /usr/local/src
 $> python -m venv siglip
 $> cd siglip/
 $> bash bin/activate
-$> bin/pip install torch transformers pillow protobuf SentencePiece
+$> bin/pip install torch transformers pillow protobuf SentencePiece Flask
 ```
 
 Then, copy the included code in [siglip_py.txt](siglip_py.txt) in to a file called `embeddings.py` (or whatever you choose). Putting it all together the URI to create a new `Embedder` intance would be:

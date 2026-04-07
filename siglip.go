@@ -16,7 +16,7 @@ import (
 
 type SigLIPEmbedder[T Float] struct {
 	Embedder[T]
-	python string
+	python        string
 	embeddings_py string
 	model         string
 	precision     string
@@ -38,7 +38,7 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 	}
 
 	q := u.Query()
-	
+
 	embeddings_py, err := filepath.Abs(u.Path)
 
 	if err != nil {
@@ -69,7 +69,7 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 
 		python = abs_python
 	}
-	
+
 	if !q.Has("model") {
 		return nil, fmt.Errorf("Required model (HuggingFace checkpoint URI) missing.")
 	}
@@ -83,7 +83,7 @@ func NewSigLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], e
 	}
 
 	e := &SigLIPEmbedder[T]{
-		python: python,
+		python:        python,
 		embeddings_py: embeddings_py,
 		precision:     precision,
 		model:         model,
