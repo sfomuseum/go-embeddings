@@ -346,6 +346,8 @@ $> echo "Hello world" | ./bin/embeddings -client-uri 'siglip://venv/usr/local/sr
 {"embeddings":[0.010030805,-0.02573614,0.029724538,... and so on
 ```
 
+_Note: A long-running "server" based implementation of this is [in the works](https://github.com/sfomuseum/go-embeddings/issues/7)._
+
 #### See also
 
 * https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md
