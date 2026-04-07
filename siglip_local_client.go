@@ -15,13 +15,6 @@ type SigLIPLocalClientEmbedder[T Float] struct {
 	precision string
 }
 
-func init() {
-	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPLocalClientEmbedder)
-	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPLocalClientEmbedder)
-	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPLocalClientEmbedder)
-}
-
 func NewSigLIPLocalClientEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)

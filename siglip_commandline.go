@@ -20,13 +20,6 @@ type SigLIPCommandLineEmbedder[T Float] struct {
 	precision     string
 }
 
-func init() {
-	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPCommandLineEmbedder)
-	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPCommandLineEmbedder)
-	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPCommandLineEmbedder)
-}
-
 func NewSigLIPCommandLineEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
