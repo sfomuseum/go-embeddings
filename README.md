@@ -352,12 +352,12 @@ $> echo "Hello world" | ./bin/embeddings -client-uri 'siglip://venv/usr/local/sr
 
 ##### Client
 
-If you want to derive SigLIP embeddings from a long-running server instance copy the included code in [siglip_server_py.txt](siglip_server_py.txt) in to a file called `embeddings_server.py` (or whatever you choose). This is a simple Flask application which can be launch as follows:
+If you want to derive SigLIP embeddings from a long-running server instance copy the included code in [siglip_server_py.txt](siglip_server_py.txt) in to a file called `siglip_server.py` (or whatever you choose). This is a simple Flask application which can be launch as follows:
 
 ```
-$> ./bin/flask --app embeddings_server run
+$> ./bin/flask --app siglip_server run
 Loading weights: 100%
- * Serving Flask app 'embeddings_server'
+ * Serving Flask app 'siglip_server'
  * Debug mode: off
 WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
  * Running on http://127.0.0.1:5000
