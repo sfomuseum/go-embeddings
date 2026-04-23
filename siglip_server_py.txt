@@ -8,7 +8,12 @@ from transformers import AutoProcessor, AutoModel
 import torch
 from PIL import Image
 
-model_name = "google/siglip-base-patch16-224"
+# 768 dimensions
+# model_name = "google/siglip-base-patch16-224"
+
+# 1024 dimensions
+model_name = "google/siglip2-base-patch16-224"
+
 pool = "mean"
 
 processor = AutoProcessor.from_pretrained(model_name)
