@@ -43,16 +43,16 @@ def get_embedding(
         inputs = processor(images=img, return_tensors="pt").to(device)
 
         with torch.no_grad():
-	    vec = model.get_image_features(**inputs)
-            vec = vec.squeeze(0) 
+	    out = model.get_image_features(**inputs)
+	    vec = out.pooler_output.squeeze(0)		    
 
     elif embeddings_type == "text":
 
         inputs = processor(text=embeddings_source, return_tensors="pt").to(device)
 
         with torch.no_grad():
-            vec = model.get_text_features(**inputs)
-            vec = vec.squeeze(0) 
+            out = model.get_text_features(**inputs)
+	    vec = out.pooler_output.squeeze(0)		    	    
 
     else:
         raise ValueError(f"embeddings_type must be 'image' or 'text', got {embeddings_type!r}")

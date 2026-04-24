@@ -1,6 +1,7 @@
 import tempfile
 import base64
 import os
+import io
 
 from flask import Flask, request, jsonify
 
@@ -17,12 +18,15 @@ from PIL import Image
 
 # 1024 dimensions
 # model_name="google/siglip-large-patch16-256"
-model_name="google/siglip2-large-patch16-256"
+# model_name="google/siglip2-large-patch16-256"
 
-# END OF something something something command line options
+# 1152 dimensions
+model_name="google/siglip2-so400m-patch16-naflex"
 
 processor = AutoProcessor.from_pretrained(model_name)
 model     = AutoModel.from_pretrained(model_name).eval()
+
+# END OF something something something command line options
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model   = model.to(device)
@@ -37,38 +41,30 @@ def embeddings():
     inputs = processor(text=req["content"], return_tensors="pt").to(device)
     
     with torch.no_grad():
-        vec = model.get_text_features(**inputs)
-        vec = vec.squeeze(0) 
+        out = model.get_text_features(**inputs)
+        vec = out.pooler_output.squeeze(0)
         
     vec = torch.nn.functional.normalize(vec, p=2, dim=0)
     rsp =  vec.cpu().numpy()
 
-    embeddings = rsp.tolist()
-    return jsonify({"embedding": embeddings, "model": model_name})
+    return jsonify({"embedding": rsp.tolist(), "model": model_name})
     
     
 @app.route("/embeddings/image", methods=['POST'])
 def embeddings_image():
 
     req = request.json
-    body = base64.b64decode(req["image_data"][0]["data"])
 
-    with tempfile.NamedTemporaryFile(delete_on_close=False, mode="wb") as wr:
+    image_bytes = base64.b64decode(req["image_data"][0]["data"])
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        wr.write(body)
-        wr.close()
-
-        img = Image.open(wr.name).convert("RGB")
-        os.remove(wr.name)
+    inputs = processor(images=img, return_tensors="pt").to(device)
+    
+    with torch.no_grad():
+        out = model.get_image_features(**inputs)
+        vec = out.pooler_output.squeeze(0)
+            
+    vec = torch.nn.functional.normalize(vec, p=2, dim=0)
+    rsp = vec.cpu().numpy()
         
-        inputs = processor(images=img, return_tensors="pt").to(device)
-
-        with torch.no_grad():
-            vec = model.get_image_features(**inputs)
-            vec = vec.squeeze(0) 
-
-        vec = torch.nn.functional.normalize(vec, p=2, dim=0)
-        rsp = vec.cpu().numpy()
-        
-        embeddings = rsp.tolist()
-        return jsonify({"embedding": embeddings, "model": model_name})
+    return jsonify({"embedding": rsp.tolist(), "model": model_name})
