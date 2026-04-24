@@ -8,13 +8,18 @@ from transformers import AutoProcessor, AutoModel
 import torch
 from PIL import Image
 
+# START OF something something something command line options
+# https://github.com/sfomuseum/go-embeddings/issues/12
+
 # 768 dimensions
 # model_name = "google/siglip-base-patch16-224"
+# model_name = "google/siglip2-base-patch16-224"
 
 # 1024 dimensions
-model_name = "google/siglip2-base-patch16-224"
+# model_name="google/siglip-large-patch16-256"
+model_name="google/siglip2-large-patch16-256"
 
-pool = "mean"
+# END OF something something something command line options
 
 processor = AutoProcessor.from_pretrained(model_name)
 model     = AutoModel.from_pretrained(model_name).eval()
@@ -32,14 +37,8 @@ def embeddings():
     inputs = processor(text=req["content"], return_tensors="pt").to(device)
     
     with torch.no_grad():
-        out = model.get_text_features(**inputs)
-        
-        if pool == "mean":
-            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
-        elif pool == "cls":
-            vec = out.pooler_output.squeeze(0)                   # (768,)
-        else:
-            raise ValueError(f"Unsupported pool option: {pool}")
+        vec = model.get_text_features(**inputs)
+        vec = vec.squeeze(0) 
         
     vec = torch.nn.functional.normalize(vec, p=2, dim=0)
     rsp =  vec.cpu().numpy()
@@ -65,14 +64,8 @@ def embeddings_image():
         inputs = processor(images=img, return_tensors="pt").to(device)
 
         with torch.no_grad():
-            out = model.get_image_features(**inputs)
-
-        if pool == "mean":
-            vec = out.last_hidden_state.mean(dim=1).squeeze(0)   # (768,)
-        elif pool == "cls":
-            vec = out.pooler_output.squeeze(0)                   # (768,)
-        else:
-            raise ValueError(f"Unsupported pool option: {pool}")
+            vec = model.get_image_features(**inputs)
+            vec = vec.squeeze(0) 
 
         vec = torch.nn.functional.normalize(vec, p=2, dim=0)
         rsp = vec.cpu().numpy()
