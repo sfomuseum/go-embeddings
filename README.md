@@ -418,15 +418,13 @@ $> cd /usr/local/src
 $> python -m venv siglip
 $> cd siglip/
 $> bash bin/activate
-$> bin/pip install torch transformers pillow protobuf SentencePiece Flask
+$> bin/pip install torch transformers pillow protobuf SentencePiece
 ```
 
-##### Command line
-
-If you want to derive SigLIP embeddings from a simple command line tool copy the included code in [siglip_py.txt](siglip_py.txt) in to a file called `embeddings.py` (or whatever you choose). Putting it all together the URI to create a new `Embedder` intance would be:
+#### Command line (siglip://)
 
 ```
-siglib://{OPTIONAL_HOST}{PATH_TO_EMBEDDINGS_DOT_PY}?{PARAMETERS}`
+siglip://{OPTIONAL_HOST}{PATH_TO_SIGLIP_CLI_PY}?{PARAMETERS}`
 ```
 
 Valid query parameters are:
@@ -436,55 +434,55 @@ Valid query parameters are:
 | model | string | yes | The HuggingFace checkpoint URI of the model to use. For example "google/siglip-so400m-patch14-384" |
 | python | string | no | The path to the Python runtime to use. For example one created by a Python virtual environment. |
 
-For example:
+Derive embeddings from a local Python script operating on a `siglip` model (described below). For example:
 
-```
-siglip:///usr/local/src/siglip/embeddings.py?model=google/siglip-base-patch16-224&python=/usr/local/src/siglip/bin/python
-```
-
-_Note how the Python runtime created in the virtual environment is specified in the `?python=` query parameter._
-
-And then putting it altogether with the `bin/embeddings` tool described above:
 
 ```
 $> echo "Hello world" | ./bin/embeddings -client-uri 'siglip://venv/usr/local/src/siglip/embeddings.py?model=google/siglip-base-patch16-224&python=/usr/local/src/siglip/bin/python' text -
 {"embeddings":[0.010030805,-0.02573614,0.029724538,... and so on
 ```
 
-##### Client
+##### Set up
 
-If you want to derive SigLIP embeddings from a long-running server instance copy the included code in [siglip_server_py.txt](siglip_server_py.txt) in to a file called `siglip_server.py` (or whatever you choose). This is a simple Flask application which can be launch as follows:
+Copy the  [siglip_cli_py.txt](siglip_cli_py.txt) file in to a `/usr/local/src/siglip/siglip_cli.py` (or whatever suits your environment).
 
-```
-$> ./bin/flask --app siglip_server run
-Loading weights: 100%
- * Serving Flask app 'siglip_server'
- * Debug mode: off
-WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
- * Running on http://127.0.0.1:5000
-Press CTRL+C to quit
-```
-
-_Note: As of this writing the included server code only supports a single SigLIP model. The default value is `google/siglip-base-patch16-224`. If you want to use a different model you will need to change it manually._
-
-The URI to create a new `Embedder` instance with this server would be:
+#### Client-server (siglip-client://)
 
 ```
-siglip-client://?{PARAMTERS}
+siglip-client://?{PARAMETERS}
 ```
 
 Valid parameters are:
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
+| server-uri | string | no | The URI of the HTTP endpoint exposing the SigLIP model functionality. Default is `http://localhost:5000`. |
 
 
-For example:
+Derive siglip embeddings from an HTTP service. For example:
 
 ```
 $> ./bin/embeddings -client-uri 'siglip-client://' image test.pmg
 {"embeddings":[-0.017064538,0.00726526,-0.0042089703 ... and so on
+```
+
+##### Set up
+
+In addition to the set up steps above you will also need to do the following to set up the server that the (siglip) client will connect to:
+
+```
+$> cd /usr/local/src/siglip
+$> bin/pip install fastapi uvicorn
+```
+
+Now copy the contents of [siglip_server_py.txt](siglip_server_py.txt] to /usr/local/src/siglip/siglip_server.py. To start the server you would do this (adjusting as necessary for your environment):
+
+```
+$> ./bin/python ./siglip_server.py --model_name google/siglip2-so400m-patch16-naflex
+INFO:     Started server process [54813]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
 ```
 
 #### See also

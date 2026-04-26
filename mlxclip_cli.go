@@ -15,7 +15,7 @@ import (
 type MLXClipEmbedder[T Float] struct {
 	Embedder[T]
 	python        string
-	model_dir string
+	model_dir     string
 	embeddings_py string
 	precision     string
 }
@@ -55,7 +55,7 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 		precision = fmt.Sprintf("%s#as-float%d", precision, 32)
 	}
 
-	if !q.Has("model"){
+	if !q.Has("model") {
 		return nil, fmt.Errorf("Missing ?model= parameter")
 	}
 
@@ -73,10 +73,10 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 		return nil, fmt.Errorf("Failed to stat model directory, %w", err)
 	}
 
-	if !info.IsDir(){
+	if !info.IsDir() {
 		return nil, fmt.Errorf("Model directory must be... a directory")
 	}
-	
+
 	python := "python"
 
 	if q.Has("python") {
@@ -98,7 +98,7 @@ func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], 
 
 	e := &MLXClipEmbedder[T]{
 		python:        python,
-		model_dir: model_dir,
+		model_dir:     model_dir,
 		embeddings_py: embeddings_py,
 		precision:     precision,
 	}
