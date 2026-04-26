@@ -4,6 +4,7 @@ import logging
 import tempfile
 import os
 from io import BytesIO
+import gc
 
 import mlx.core as mlx_core
 import uvicorn
@@ -50,11 +51,7 @@ async def embeddings_image(payload: dict = Body(...)):
     try:
         img_b64 = payload["image_data"][0]["data"]
         img_data = base64.b64decode(img_b64)
-        
         img = Image.open(BytesIO(img_data)).convert("RGB")
-        out_buffer = BytesIO()
-        img.save(out_buffer, format="PNG")
-        img_bytes = out_buffer.getvalue()
     except Exception as e:
         log.exception("Image decoding failed")
         raise HTTPException(status_code=400, detail="Invalid image data")
@@ -62,7 +59,7 @@ async def embeddings_image(payload: dict = Body(...)):
     temp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as wr:
-            wr.write(img_bytes)
+            img.save(wr.name, format="PNG")
             temp_path = wr.name
 
         with setup_mlx_stream():
@@ -73,8 +70,12 @@ async def embeddings_image(payload: dict = Body(...)):
         log.exception("Image encoding failed")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
+        
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
 
+        mlx_core.metal.clear_cache()
+        gc.collect()
+        
 if __name__ == "__main__":
     uvicorn.run(app, host=_args.host, port=_args.port)

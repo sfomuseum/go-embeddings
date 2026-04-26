@@ -495,7 +495,7 @@ $> cd /usr/local/src/siglip
 $> bin/pip install fastapi uvicorn
 ```
 
-Now copy the contents of [siglip_server_py.txt](siglip_server_py.txt] to /usr/local/src/siglip/siglip_server.py. To start the server you would do this (adjusting as necessary for your environment):
+Copy the contents of [siglip_server_py.txt](siglip_server_py.txt) to /usr/local/src/siglip/siglip_server.py. To start the server you would do this (adjusting as necessary for your environment):
 
 ```
 $> ./bin/python ./siglip_server.py --model_name google/siglip2-so400m-patch16-naflex
