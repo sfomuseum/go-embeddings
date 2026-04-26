@@ -34,8 +34,8 @@ func NewMLXClipLocalClientEmbedder[T Float](ctx context.Context, uri string) (Em
 
 	client_uri := "http://localhost:5000"
 
-	if q.Has("client-uri") {
-		client_uri = q.Get("client-uri")
+	if q.Has("server-uri") {
+		client_uri = q.Get("server-uri")
 	}
 
 	cl, err := NewLocalClient(ctx, client_uri)

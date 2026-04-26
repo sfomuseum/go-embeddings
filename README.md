@@ -205,7 +205,51 @@ The option requires a device using an Apple Silicon chip and involves a non-zero
 
 #### Set up
 
-As of this writing I am not sure I have working set up instructions. Specifically you want something like the include code in the [mlxclip_py.txt](mlxclip_py.txt) file which in turn loads the [mlx_clip](https://github.com/harperreed/mlx_clip) library. Nothing fancy but since first getting this to work something has changed (?) that prevents Python from importing the `mlx_clip` package. This remains to be resolved.
+The set up process for using `mlx_clip` is involved. The first step is to create a Python virtual environment:
+
+```
+$> python -mvenv /usr/local/src/mlxclip
+$> cd  /usr/local/src/mlxclip
+$> bash ./bin/activate
+```
+
+Next create some sub-folders used to store dependencies and data:
+
+```
+$> mkdir src
+$> mkdir -p data/openai/clip-vit-base-patch32
+```
+
+First, install the `mlx-data` package:
+
+```
+$> cd /usr/local/src/mlxclip/src
+$> git clone git@github.com:ml-explore/mlx-data.git
+$> cd mlx-data
+$> ../../bin/python install setup.py
+```
+
+Next, install the MLX `clip` package from the `mlx-examples` package:
+
+```
+$> cd /usr/local/src/mlxclip/src
+$> git clone git@github.com:ml-explore/mlx-examples.git
+$> cd mlx-examples/clip
+$> ../../bin/pip install -r requirements.txt
+$> ../../bin/python ./convert.py --mlx-path /usr/local/src/mlxclip/data/openai/clip-vit-base-patch32
+```
+
+Finally install the `harperreed/mlx_clip` package and copy it to the root of your virtual environment:
+
+```
+$> cd /usr/local/src/mlxclip/src
+$> git clone git@github.com:harperreed/mlx_clip.git
+$> cd mlx_clip
+$> ../../bin/pip install -r requirements.txt
+$> cp -r mlx_clip ../../
+```
+
+At this point you _should_ be ready to use the command line tools. By the time you read this something may have changed or there may be additional steps to account for your environment. This is what has worked for me so far.
 
 #### Command line (mlxclip://)
 
@@ -220,7 +264,7 @@ Valid query parameters are:
 | model | string | yes | The path to directory with MLX-compatible model data. |
 | python | string | no | The path to the Python runtime to use. For example one created by a Python virtual environment. |
 
-For example:
+The `mlxclip://` scheme will derive embeddings from a command line Python script (details below). For example:
 
 ```
 ./bin/embeddings \
@@ -231,11 +275,50 @@ For example:
 {"embeddings":[0.0049408292,0.034288883,... and so on
 ```
 
+##### Set up
+
+Copy the contents of [mlxclip_cli_py.txt](mlxclip_cli_py.txt) to `/usr/local/src/mlxclip/mlxclip_cli.py`.
+
 #### Client-server (mlxclip-client://)
+
+```
+mlxclip-client://?{PARMETERS}
+```
+
+Valid query parameters are:
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| server-uri | string | no | The URI of the mlx clip server producing embeddings. Default is `http://localhost:5000`. |
+
+For example:
 
 ```
 $> echo "Hello world" | ./bin/embeddings -client-uri 'mlxclip-client://' text -
 {"embeddings":[0.008282159, ... and so on
+```
+
+##### Set up
+
+In addition to the set up steps above you will also need to do the following to set up the server that the (mlx) client will connect to:
+
+```
+$> cd /usr/local/src/mlxclip
+$> bin/pip install fastapi uvicorn
+
+Now copy the contents of [mlxclip_server_py.txt](mlxclip_server_py.txt) to `/usr/local/src/mlxclip/mlxclip_server.py`. To start the server you would do this (adjusting as necessary for your environment):
+
+```
+$> ./bin/python ./mlx_server.py --model_dir=data/openai/clip-vit-base-patch32/
+INFO:__main__:Loading MLX-CLIP model from data/openai/clip-vit-base-patch32/
+INFO:mlx_clip:Loading CLIP model from directory: data/openai/clip-vit-base-patch32/
+INFO:     Started server process [22613]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60982 - "POST /embeddings/image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60983 - "POST /embeddings/image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60984 - "POST /embeddings HTTP/1.1" 200 OK
 ```
 
 #### See also
