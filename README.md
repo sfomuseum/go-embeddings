@@ -302,12 +302,26 @@ In addition to the set up steps above you will also need to do the following to 
 
 ```
 $> cd /usr/local/src/mlxclip
-$> bin/pip install fastapi uvicorn
+$> bin/pip install fastapi uvicorn asyncio
 ```
 
 Now copy the contents of [mlxclip_server_py.txt](mlxclip_server_py.txt) to `/usr/local/src/mlxclip/mlxclip_server.py`. To start the server you would do this (adjusting as necessary for your environment):
 
 ```
+$> ./bin/python ./mlx_server.py -h
+usage: mlx_server.py [-h] --model_dir MODEL_DIR [--host HOST] [--port PORT] [--max-workers MAX_WORKERS]
+
+MLX-Clip FastAPI embedding service
+
+options:
+  -h, --help            show this help message and exit
+  --model_dir MODEL_DIR
+                        Path to MLX CLIP model directory
+  --host HOST           The host the service will listen on.
+  --port PORT           The port the service will listen on.
+  --max-workers MAX_WORKERS
+                        The maximum number of concurrent mlx processes.
+			
 $> ./bin/python ./mlx_server.py --model_dir=data/openai/clip-vit-base-patch32/
 INFO:__main__:Loading MLX-CLIP model from data/openai/clip-vit-base-patch32/
 INFO:mlx_clip:Loading CLIP model from directory: data/openai/clip-vit-base-patch32/

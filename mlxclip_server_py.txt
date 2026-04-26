@@ -6,6 +6,7 @@ import os
 from io import BytesIO
 import gc
 
+import asyncio
 import mlx.core as mlx_core
 import uvicorn
 from fastapi import FastAPI, HTTPException, Body
@@ -14,8 +15,9 @@ from mlx_clip import mlx_clip
 
 parser = argparse.ArgumentParser(description="MLX-Clip FastAPI embedding service")
 parser.add_argument("--model_dir", required=True, help="Path to MLX CLIP model directory")
-parser.add_argument("--host", default="localhost")
-parser.add_argument("--port", type=int, default=5000)
+parser.add_argument("--host", default="localhost", help="The host the service will listen on.")
+parser.add_argument("--port", type=int, default=5000, help="The port the service will listen on.")
+parser.add_argument("--max-workers", type=int, default=5, help="The maximum number of concurrent mlx processes.")
 _args = parser.parse_args()
 
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +30,8 @@ MODEL_NAME = "mlxclip#" + clip.hf_repo
 
 app = FastAPI(title="MLX-Clip Service")
 
+memory_semaphore = asyncio.Semaphore(_args.max_workers)
+
 def setup_mlx_stream():
     """Ensures a valid GPU stream is active for the current async task."""
     dev = mlx_core.Device(mlx_core.gpu, 0)
@@ -35,47 +39,58 @@ def setup_mlx_stream():
 
 @app.post("/embeddings")
 async def embeddings_text(payload: dict = Body(...)):
+
     if "content" not in payload:
         raise HTTPException(status_code=400, detail="Missing 'content'")
-    
-    try:
-        with setup_mlx_stream():
-            embedding = clip.text_encoder(payload["content"])
-            return {"embeddings": embedding, "model": MODEL_NAME}
-    except Exception as e:
-        log.exception("Text encoding failed")
-        raise HTTPException(status_code=500, detail=str(e))
+
+    async with memory_semaphore:
+        
+        try:
+            with setup_mlx_stream():
+                embedding = clip.text_encoder(payload["content"])
+                return {"embeddings": embedding, "model": MODEL_NAME}
+        except Exception as e:
+            log.exception("Text encoding failed")
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            
+            mlx_core.metal.clear_cache()
+            gc.collect()
 
 @app.post("/embeddings/image")
 async def embeddings_image(payload: dict = Body(...)):
-    try:
-        img_b64 = payload["image_data"][0]["data"]
-        img_data = base64.b64decode(img_b64)
-        img = Image.open(BytesIO(img_data)).convert("RGB")
-    except Exception as e:
-        log.exception("Image decoding failed")
-        raise HTTPException(status_code=400, detail="Invalid image data")
 
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as wr:
-            img.save(wr.name, format="PNG")
-            temp_path = wr.name
-
-        with setup_mlx_stream():
-            embedding = clip.image_encoder(temp_path)
-            
-        return {"embeddings": embedding, "model": MODEL_NAME}
-    except Exception as e:
-        log.exception("Image encoding failed")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
+    async with memory_semaphore:
         
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
+        try:
+            img_b64 = payload["image_data"][0]["data"]
+            img_data = base64.b64decode(img_b64)
+            img = Image.open(BytesIO(img_data)).convert("RGB")
+        except Exception as e:
+            log.exception("Image decoding failed")
+            raise HTTPException(status_code=400, detail="Invalid image data")
+        
+        temp_path = None
+        
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as wr:
+                img.save(wr.name, format="PNG")
+                temp_path = wr.name
 
-        mlx_core.metal.clear_cache()
-        gc.collect()
+            with setup_mlx_stream():
+                embedding = clip.image_encoder(temp_path)
+                return {"embeddings": embedding, "model": MODEL_NAME}
+
+        except Exception as e:
+            log.exception("Image encoding failed")
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+        
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+                
+            mlx_core.metal.clear_cache()
+            gc.collect()
         
 if __name__ == "__main__":
     uvicorn.run(app, host=_args.host, port=_args.port)
