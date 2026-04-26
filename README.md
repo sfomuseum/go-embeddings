@@ -373,36 +373,56 @@ ollama://?{PARAMETERS}
 
 Derive vector embeddings from a web service exposing the [OpenCLIP](https://github.com/mlfoundations/open_clip) model and library.
 
-The option involves a non-zero manual set up process discussed below.
-
-```
-openclip://?{PARAMETERS}
-```
-
-| Name | Value | Required | Notes |
-| --- | --- | --- | --- |
-| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
-
 #### Set up
 
-Using this implementation requires running a HTTP service exposing the OpenCLIP functionality. The easiest way to do that is in a Python "virtual environment" configured as follows:
+Create a new Python virtual environment and install the necessary dependencies:
 
 ```
 $> python -m venv openclip
 $> cd openclip/
 $> bash bin/activate
-$> bin/pip install flask open_clip_torch Pillow
+$> bin/pip install open_clip_torch Pillow
+```
+
+#### Command-line (openclip://)
+
+This option is not suported yet.
+
+#### Client-server (openclip-client://)
+
+```
+openclip-client://?{PARAMETERS}
+```
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| server-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
+
+Derive OpenCLIP embeddings from an HTTP service. For example:
+
+```
+$> echo "hi there" | ./bin/embeddings -client-uri 'openclip-client://' text -
+{"embeddings":[-0.24023438,0.09472656,0.12695312, ... and so on
+```
+
+##### Set up
+
+In addition to the set up steps above you will also need to do the following to set up the server that the (openclip) client will connect to:
+
+```
+$> cd /usr/local/src/siglip
+$> bin/pip install fastapi uvicorn
 ```
 
 Then, copy the included code in [openclip_server_py.txt](openclip_server_py.txt) in to a file called openclip_server.py and launch it as follows:
 
 ```
-$> bin/flask --app openclip_server run
- * Serving Flask app 'openclip_server'
- * Debug mode: off
-INFO:werkzeug:WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
- * Running on http://127.0.0.1:5000
-INFO:werkzeug:Press CTRL+C to quit
+$> ./bin/python ./openclip_server.py
+INFO:     Started server process [67888]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:61064 - "POST /embeddings HTTP/1.1" 200 OK
 ```
 
 ### siglip://
