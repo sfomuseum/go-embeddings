@@ -199,9 +199,7 @@ llamafile://?{PARAMETERS}
 
 ### mlxclip://
 
-Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library which emits JSON-encoded embeddings to STDOUT.
-
-The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
+Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library. The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
 
 #### Set up
 
@@ -305,6 +303,7 @@ In addition to the set up steps above you will also need to do the following to 
 ```
 $> cd /usr/local/src/mlxclip
 $> bin/pip install fastapi uvicorn
+```
 
 Now copy the contents of [mlxclip_server_py.txt](mlxclip_server_py.txt) to `/usr/local/src/mlxclip/mlxclip_server.py`. To start the server you would do this (adjusting as necessary for your environment):
 
