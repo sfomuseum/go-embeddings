@@ -288,12 +288,10 @@ Using this implementation requires running a HTTP service exposing the OpenCLIP 
 $> python -m venv openclip
 $> cd openclip/
 $> bash bin/activate
-$> bin/pip install flask
-$> bin/pip install open_clip_torch
-$> bin/pip install Pillow
+$> bin/pip install flask open_clip_torch Pillow
 ```
 
-Then, copy the included code in [openclip_server.txt](openclip_server.txt) in to a file called openclip_server.py and launch it as follows:
+Then, copy the included code in [openclip_server_py.txt](openclip_server_py.txt) in to a file called openclip_server.py and launch it as follows:
 
 ```
 $> bin/flask --app openclip_server run

@@ -1,0 +1,136 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import argparse
+import base64
+import logging
+import os
+import sys
+from io import BytesIO
+
+import open_clip
+import torch
+from flask import Flask, jsonify, request
+from PIL import Image
+
+def _parse_args():
+    parser = argparse.ArgumentParser(description="OpenCLIP Flask embedding service")
+    parser.add_argument(
+        "--model_family",
+        default=os.getenv("MODEL_FAMILY", "ViT-g-14"),
+        help="OpenCLIP model family (e.g. ViT-g-14, ViT-B-32).",
+    )
+    parser.add_argument(
+        "--model_checkpoint",
+        default=os.getenv("MODEL_CHECKPOINT", "laion2b_s34b_b88k"),
+        help="Pre‑trained checkpoint name.",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.getenv("FLASK_HOST", "localhost"),
+        help="Host address for Flask.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("FLASK_PORT", "5000")),
+        help="Port number for Flask.",
+    )
+    parser.add_argument(
+        "--log_level",
+        default=os.getenv("LOG_LEVEL", "INFO"),
+        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+    )
+    return parser.parse_args()
+
+
+_args = _parse_args()
+
+logging.basicConfig(
+    level=getattr(logging, _args.log_level.upper(), logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stdout,
+)
+
+log = logging.getLogger(__name__)
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+log.info(f"Using device: {DEVICE}")
+
+MODEL_FAMILY = _args.model_family
+MODEL_CHECKPOINT = _args.model_checkpoint
+MODEL_NAME = f"openclip/{MODEL_FAMILY}#{MODEL_CHECKPOINT}"
+
+log.info(f"Loading OpenCLIP model {MODEL_FAMILY} ({MODEL_CHECKPOINT})")
+
+MODEL, _, PREPROCESS = open_clip.create_model_and_transforms(
+    MODEL_FAMILY, pretrained=MODEL_CHECKPOINT
+)
+
+MODEL.to(DEVICE).eval()
+
+TOKENIZER = open_clip.get_tokenizer(MODEL_FAMILY)
+
+app = Flask(__name__)
+
+def decode_image(b64_data: str) -> Image.Image:
+    """Decode a base64 string into a PIL.Image. Raises ValueError on failure."""
+    try:
+        raw = base64.b64decode(b64_data)
+        return Image.open(BytesIO(raw)).convert("RGB")
+    except Exception as exc:
+        log.exception("Failed to decode base64 image")
+        raise ValueError("Invalid base64 image data") from exc
+
+
+@app.route("/embeddings", methods=["POST"])
+def embeddings():
+    """
+    Return a text embedding.
+
+    Request JSON:
+      { "content": "some text" }
+
+    Response JSON:
+      { "embedding": [...], "model": "openclip/..." }
+    """
+    try:
+        payload = request.get_json(force=True)
+        text = payload["content"]
+    except Exception:
+        return jsonify({"error": "Missing or malformed 'content' field"}), 400
+
+    tokens = TOKENIZER([text])
+    with torch.no_grad(), torch.autocast(DEVICE.type):
+        feats = MODEL.encode_text(tokens)
+        emb = feats.cpu().tolist()[0]
+    return jsonify({"embedding": emb, "model": MODEL_NAME})
+
+
+@app.route("/embeddings/image", methods=["POST"])
+def embeddings_image():
+    """
+    Return an image embedding.
+
+    Request JSON:
+      { "image_data": [ { "data": "<base64 string>" } ] }
+
+    Response JSON:
+      { "embedding": [...], "model": "openclip/..." }
+    """
+    try:
+        payload = request.get_json(force=True)
+        img_b64 = payload["image_data"][0]["data"]
+        image = decode_image(img_b64)
+    except Exception as exc:
+        log.exception("Image endpoint error")
+        return jsonify({"error": str(exc)}), 400
+
+    img_tensor = PREPROCESS(image).unsqueeze(0).to(DEVICE)
+    with torch.no_grad(), torch.autocast(DEVICE.type):
+        feats = MODEL.encode_image(img_tensor)
+        emb = feats.cpu().tolist()[0]
+    return jsonify({"embedding": emb, "model": MODEL_NAME})
+
+if __name__ == "__main__":
+    app.run(host=_args.host, port=_args.port, threaded=True)
