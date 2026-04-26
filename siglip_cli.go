@@ -139,9 +139,9 @@ func (e *SigLIPCommandLineEmbedder[T]) generateEmbeddingsFromCommandLine(ctx con
 	args := []string{
 		e.embeddings_py,
 		"--model_name", e.model,
-		"--embeddings_type", target,
-		"--embeddings_source", input,
-		"--embeddings_output", tmp.Name(),
+		"--mode", target,
+		"--input", input,
+		"--output", tmp.Name(),
 	}
 
 	cmd := exec.CommandContext(ctx, e.python, args...)

@@ -10,8 +10,9 @@ from io import BytesIO
 
 import open_clip
 import torch
-from flask import Flask, jsonify, request
 from PIL import Image
+import uvicorn
+from fastapi import FastAPI, HTTPException, Body
 
 def _parse_args():
     parser = argparse.ArgumentParser(description="OpenCLIP Flask embedding service")
@@ -71,66 +72,42 @@ MODEL.to(DEVICE).eval()
 
 TOKENIZER = open_clip.get_tokenizer(MODEL_FAMILY)
 
-app = Flask(__name__)
+app = FastAPI(title="OpenCLIP Service")
 
-def decode_image(b64_data: str) -> Image.Image:
-    """Decode a base64 string into a PIL.Image. Raises ValueError on failure."""
-    try:
-        raw = base64.b64decode(b64_data)
-        return Image.open(BytesIO(raw)).convert("RGB")
-    except Exception as exc:
-        log.exception("Failed to decode base64 image")
-        raise ValueError("Invalid base64 image data") from exc
+@app.post("/embeddings")
+async def embeddings(payload: dict = Body(...)):
 
-
-@app.route("/embeddings", methods=["POST"])
-def embeddings():
-    """
-    Return a text embedding.
-
-    Request JSON:
-      { "content": "some text" }
-
-    Response JSON:
-      { "embedding": [...], "model": "openclip/..." }
-    """
-    try:
-        payload = request.get_json(force=True)
-        text = payload["content"]
-    except Exception:
-        return jsonify({"error": "Missing or malformed 'content' field"}), 400
-
-    tokens = TOKENIZER([text])
+    if "content" not in payload:
+        raise HTTPException(status_code=400, detail="Missing 'content'")
+    
+    tokens = TOKENIZER([ payload["content"] ])
+    
     with torch.no_grad(), torch.autocast(DEVICE.type):
         feats = MODEL.encode_text(tokens)
         emb = feats.cpu().tolist()[0]
-    return jsonify({"embedding": emb, "model": MODEL_NAME})
+        
+    return {"embeddings": emb, "model": MODEL_NAME}
 
 
-@app.route("/embeddings/image", methods=["POST"])
-def embeddings_image():
-    """
-    Return an image embedding.
+@app.post("/embeddings/image")
+async def embeddings_image(payload: dict = Body(...)):
 
-    Request JSON:
-      { "image_data": [ { "data": "<base64 string>" } ] }
-
-    Response JSON:
-      { "embedding": [...], "model": "openclip/..." }
-    """
     try:
-        payload = request.get_json(force=True)
         img_b64 = payload["image_data"][0]["data"]
-        image = decode_image(img_b64)
-    except Exception as exc:
-        log.exception("Image endpoint error")
-        return jsonify({"error": str(exc)}), 400
-
-    img_tensor = PREPROCESS(image).unsqueeze(0).to(DEVICE)
+        img_data = base64.b64decode(img_b64)
+        
+        img = Image.open(BytesIO(img_data)).convert("RGB")
+    except:
+        log.error("Failed to parse image")
+        raise HTTPException(status_code=400, detail="Invalid image data")    
+        
+    img_tensor = PREPROCESS(img).unsqueeze(0).to(DEVICE)
+    
     with torch.no_grad(), torch.autocast(DEVICE.type):
         feats = MODEL.encode_image(img_tensor)
         emb = feats.cpu().tolist()[0]
-    return jsonify({"embedding": emb, "model": MODEL_NAME})
+        
+    return {"embedding": emb, "model": MODEL_NAME}
 
 if __name__ == "__main__":
-    app.run(host=_args.host, port=_args.port, threaded=True)
+    uvicorn.run(app, host=_args.host, port=_args.port)    

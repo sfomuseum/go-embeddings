@@ -1,0 +1,96 @@
+from transformers import AutoProcessor, AutoModel
+import torch
+from PIL import Image
+import json
+
+def get_embedding(
+    model_name: str,
+    mode: str,          # "image"  or  "text"
+    input,             # path to an image  OR  a string
+) -> np.ndarray:
+
+    processor = AutoProcessor.from_pretrained(model_name)
+    model     = AutoModel.from_pretrained(model_name).eval()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model   = model.to(device)
+
+    if mode == "image":
+
+        img = Image.open(input).convert("RGB")
+        inputs = processor(images=img, return_tensors="pt").to(device)
+        
+        with torch.no_grad():
+            out = model.get_image_features(**inputs)
+            vec = out.pooler_output.squeeze(0)		    
+            
+    elif mode == "text":
+        
+        inputs = processor(text=input, return_tensors="pt").to(device)
+        
+        with torch.no_grad():
+            out = model.get_text_features(**inputs)
+            vec = out.pooler_output.squeeze(0)		    	    
+
+    else:
+        raise ValueError(f"mode must be 'image' or 'text', got {mode!r}")
+
+    vec = torch.nn.functional.normalize(vec, p=2, dim=0)
+    return vec.cpu().numpy()
+
+if __name__ == "__main__":
+
+    import optparse
+    import sys
+    
+    parser = optparse.OptionParser(
+        description="Generate a SigLIP embedding from an image or text.",
+        usage="%(prog)s --model_name MODEL --mode TYPE "
+        "--input SRC",
+    )
+    
+    parser.add_option(
+        "--model_name",
+        dest="model_name",
+        help="HuggingFace model checkpoint (e.g. google/siglip-base-patch16-224)",
+    )
+    parser.add_option(
+        "--mode",
+        dest="mode",
+        help="Either 'image' or 'text'",
+    )
+    parser.add_option(
+        "--input",
+        dest="input",
+        help="Path to an image file (for image) or a literal string (for text)",
+    )
+    parser.add_option(
+        "--output",
+        dest="output",
+        help="",
+    )
+    
+    opts, args = parser.parse_args(sys.argv)
+
+    if not opts.model_name:
+        parser.error("The --model_name argument is required.")
+        
+    if opts.mode not in ("image", "text"):
+        parser.error("The --mode argument must be 'image' or 'text'.")
+        
+    if not opts.input:
+        parser.error("The --input argument is required.")
+
+    if not opts.output:
+        parser.error("The --output argument is required.")
+
+
+    rsp = get_embedding(
+        model_name=opts.model_name,
+        mode=opts.mode,
+        input=opts.input,
+    )
+
+    with open(opts.output, "w") as wr:
+    	 json.dump(rsp.tolist(), wr)
+

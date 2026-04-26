@@ -199,9 +199,57 @@ llamafile://?{PARAMETERS}
 
 ### mlxclip://
 
-Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library which emits JSON-encoded embeddings to STDOUT.
+Derive vector embeddings from a Python script using the [harperreed/mlx_clip](https://github.com/harperreed/mlx_clip) library. The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
 
-The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
+#### Set up
+
+The set up process for using `mlx_clip` is involved. The first step is to create a Python virtual environment:
+
+```
+$> python -mvenv /usr/local/src/mlxclip
+$> cd  /usr/local/src/mlxclip
+$> bash ./bin/activate
+```
+
+Next create some sub-folders used to store dependencies and data:
+
+```
+$> mkdir src
+$> mkdir -p data/openai/clip-vit-base-patch32
+```
+
+First, install the `mlx-data` package:
+
+```
+$> cd /usr/local/src/mlxclip/src
+$> git clone git@github.com:ml-explore/mlx-data.git
+$> cd mlx-data
+$> ../../bin/python install setup.py
+```
+
+Next, install the MLX `clip` package from the `mlx-examples` package:
+
+```
+$> cd /usr/local/src/mlxclip/src
+$> git clone git@github.com:ml-explore/mlx-examples.git
+$> cd mlx-examples/clip
+$> ../../bin/pip install -r requirements.txt
+$> ../../bin/python ./convert.py --mlx-path /usr/local/src/mlxclip/data/openai/clip-vit-base-patch32
+```
+
+Finally install the `harperreed/mlx_clip` package and copy it to the root of your virtual environment:
+
+```
+$> cd /usr/local/src/mlxclip/src
+$> git clone git@github.com:harperreed/mlx_clip.git
+$> cd mlx_clip
+$> ../../bin/pip install -r requirements.txt
+$> cp -r mlx_clip ../../
+```
+
+At this point you _should_ be ready to use the command line tools. By the time you read this something may have changed or there may be additional steps to account for your environment. This is what has worked for me so far.
+
+#### Command line (mlxclip://)
 
 ```
 mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}?{PARAMETERS}
@@ -211,11 +259,66 @@ Valid query parameters are:
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
+| model | string | yes | The path to directory with MLX-compatible model data. |
 | python | string | no | The path to the Python runtime to use. For example one created by a Python virtual environment. |
 
-#### Set up
+The `mlxclip://` scheme will derive embeddings from a command line Python script (details below). For example:
 
-As of this writing I am not sure I have working set up instructions. Specifically you want something like the include code in the [mlxclip_py.txt](mlxclip_py.txt) file which in turn loads the [mlx_clip](https://github.com/harperreed/mlx_clip) library. Nothing fancy but since first getting this to work something has changed (?) that prevents Python from importing the `mlx_clip` package. This remains to be resolved.
+```
+./bin/embeddings \
+	-client-uri 'mlxclip:///usr/local/src/mlxclip/mlx_cli.py?model=/usr/local/src/mlxclip/data/openai/clip-vit-base-patch32&python=/usr/local/src/mlxclip/bin/python' \
+	image \
+	test20.jpg
+	
+{"embeddings":[0.0049408292,0.034288883,... and so on
+```
+
+##### Set up
+
+Copy the contents of [mlxclip_cli_py.txt](mlxclip_cli_py.txt) to `/usr/local/src/mlxclip/mlxclip_cli.py`.
+
+#### Client-server (mlxclip-client://)
+
+```
+mlxclip-client://?{PARMETERS}
+```
+
+Valid query parameters are:
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| server-uri | string | no | The URI of the mlx clip server producing embeddings. Default is `http://localhost:5000`. |
+
+For example:
+
+```
+$> echo "Hello world" | ./bin/embeddings -client-uri 'mlxclip-client://' text -
+{"embeddings":[0.008282159, ... and so on
+```
+
+##### Set up
+
+In addition to the set up steps above you will also need to do the following to set up the server that the (mlx) client will connect to:
+
+```
+$> cd /usr/local/src/mlxclip
+$> bin/pip install fastapi uvicorn
+```
+
+Now copy the contents of [mlxclip_server_py.txt](mlxclip_server_py.txt) to `/usr/local/src/mlxclip/mlxclip_server.py`. To start the server you would do this (adjusting as necessary for your environment):
+
+```
+$> ./bin/python ./mlx_server.py --model_dir=data/openai/clip-vit-base-patch32/
+INFO:__main__:Loading MLX-CLIP model from data/openai/clip-vit-base-patch32/
+INFO:mlx_clip:Loading CLIP model from directory: data/openai/clip-vit-base-patch32/
+INFO:     Started server process [22613]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60982 - "POST /embeddings/image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60983 - "POST /embeddings/image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60984 - "POST /embeddings HTTP/1.1" 200 OK
+```
 
 #### See also
 
@@ -270,36 +373,56 @@ ollama://?{PARAMETERS}
 
 Derive vector embeddings from a web service exposing the [OpenCLIP](https://github.com/mlfoundations/open_clip) model and library.
 
-The option involves a non-zero manual set up process discussed below.
-
-```
-openclip://?{PARAMETERS}
-```
-
-| Name | Value | Required | Notes |
-| --- | --- | --- | --- |
-| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
-
 #### Set up
 
-Using this implementation requires running a HTTP service exposing the OpenCLIP functionality. The easiest way to do that is in a Python "virtual environment" configured as follows:
+Create a new Python virtual environment and install the necessary dependencies:
 
 ```
 $> python -m venv openclip
 $> cd openclip/
 $> bash bin/activate
-$> bin/pip install flask open_clip_torch Pillow
+$> bin/pip install open_clip_torch Pillow
+```
+
+#### Command-line (openclip://)
+
+This option is not suported yet.
+
+#### Client-server (openclip-client://)
+
+```
+openclip-client://?{PARAMETERS}
+```
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| server-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
+
+Derive OpenCLIP embeddings from an HTTP service. For example:
+
+```
+$> echo "hi there" | ./bin/embeddings -client-uri 'openclip-client://' text -
+{"embeddings":[-0.24023438,0.09472656,0.12695312, ... and so on
+```
+
+##### Set up
+
+In addition to the set up steps above you will also need to do the following to set up the server that the (openclip) client will connect to:
+
+```
+$> cd /usr/local/src/siglip
+$> bin/pip install fastapi uvicorn
 ```
 
 Then, copy the included code in [openclip_server_py.txt](openclip_server_py.txt) in to a file called openclip_server.py and launch it as follows:
 
 ```
-$> bin/flask --app openclip_server run
- * Serving Flask app 'openclip_server'
- * Debug mode: off
-INFO:werkzeug:WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
- * Running on http://127.0.0.1:5000
-INFO:werkzeug:Press CTRL+C to quit
+$> ./bin/python ./openclip_server.py
+INFO:     Started server process [67888]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:61064 - "POST /embeddings HTTP/1.1" 200 OK
 ```
 
 ### siglip://
@@ -315,15 +438,13 @@ $> cd /usr/local/src
 $> python -m venv siglip
 $> cd siglip/
 $> bash bin/activate
-$> bin/pip install torch transformers pillow protobuf SentencePiece Flask
+$> bin/pip install torch transformers pillow protobuf SentencePiece
 ```
 
-##### Command line
-
-If you want to derive SigLIP embeddings from a simple command line tool copy the included code in [siglip_py.txt](siglip_py.txt) in to a file called `embeddings.py` (or whatever you choose). Putting it all together the URI to create a new `Embedder` intance would be:
+#### Command line (siglip://)
 
 ```
-siglib://{OPTIONAL_HOST}{PATH_TO_EMBEDDINGS_DOT_PY}?{PARAMETERS}`
+siglip://{OPTIONAL_HOST}{PATH_TO_SIGLIP_CLI_PY}?{PARAMETERS}`
 ```
 
 Valid query parameters are:
@@ -333,55 +454,55 @@ Valid query parameters are:
 | model | string | yes | The HuggingFace checkpoint URI of the model to use. For example "google/siglip-so400m-patch14-384" |
 | python | string | no | The path to the Python runtime to use. For example one created by a Python virtual environment. |
 
-For example:
+Derive embeddings from a local Python script operating on a `siglip` model (described below). For example:
 
-```
-siglip:///usr/local/src/siglip/embeddings.py?model=google/siglip-base-patch16-224&python=/usr/local/src/siglip/bin/python
-```
-
-_Note how the Python runtime created in the virtual environment is specified in the `?python=` query parameter._
-
-And then putting it altogether with the `bin/embeddings` tool described above:
 
 ```
 $> echo "Hello world" | ./bin/embeddings -client-uri 'siglip://venv/usr/local/src/siglip/embeddings.py?model=google/siglip-base-patch16-224&python=/usr/local/src/siglip/bin/python' text -
 {"embeddings":[0.010030805,-0.02573614,0.029724538,... and so on
 ```
 
-##### Client
+##### Set up
 
-If you want to derive SigLIP embeddings from a long-running server instance copy the included code in [siglip_server_py.txt](siglip_server_py.txt) in to a file called `siglip_server.py` (or whatever you choose). This is a simple Flask application which can be launch as follows:
+Copy the  [siglip_cli_py.txt](siglip_cli_py.txt) file in to a `/usr/local/src/siglip/siglip_cli.py` (or whatever suits your environment).
 
-```
-$> ./bin/flask --app siglip_server run
-Loading weights: 100%
- * Serving Flask app 'siglip_server'
- * Debug mode: off
-WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
- * Running on http://127.0.0.1:5000
-Press CTRL+C to quit
-```
-
-_Note: As of this writing the included server code only supports a single SigLIP model. The default value is `google/siglip-base-patch16-224`. If you want to use a different model you will need to change it manually._
-
-The URI to create a new `Embedder` instance with this server would be:
+#### Client-server (siglip-client://)
 
 ```
-siglip-client://?{PARAMTERS}
+siglip-client://?{PARAMETERS}
 ```
 
 Valid parameters are:
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-| client-uri | string | no | The URI of the HTTP endpoint exposing the OpenCLIP model functionality. Default is `http://localhost:5000`. |
+| server-uri | string | no | The URI of the HTTP endpoint exposing the SigLIP model functionality. Default is `http://localhost:5000`. |
 
 
-For example:
+Derive siglip embeddings from an HTTP service. For example:
 
 ```
 $> ./bin/embeddings -client-uri 'siglip-client://' image test.pmg
 {"embeddings":[-0.017064538,0.00726526,-0.0042089703 ... and so on
+```
+
+##### Set up
+
+In addition to the set up steps above you will also need to do the following to set up the server that the (siglip) client will connect to:
+
+```
+$> cd /usr/local/src/siglip
+$> bin/pip install fastapi uvicorn
+```
+
+Now copy the contents of [siglip_server_py.txt](siglip_server_py.txt] to /usr/local/src/siglip/siglip_server.py. To start the server you would do this (adjusting as necessary for your environment):
+
+```
+$> ./bin/python ./siglip_server.py --model_name google/siglip2-so400m-patch16-naflex
+INFO:     Started server process [54813]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
 ```
 
 #### See also

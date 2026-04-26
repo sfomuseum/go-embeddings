@@ -1,0 +1,48 @@
+import argparse
+import sys
+import json
+import tempfile
+import os
+from PIL import Image
+from io import BytesIO
+
+from mlx_clip import mlx_clip
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="MLX-Clip command line tool")
+    parser.add_argument("--model_dir", required=True, help="Path to MLX CLIP model directory")
+    parser.add_argument("--mode", required=True, help="Embeddings mode: image or text")    
+    parser.add_argument("--input", required=True, help="Path to input data")
+    parser.add_argument("--output", required=True, help="Path to output data")    
+
+    _args = parser.parse_args()    
+    clip = mlx_clip(_args.model_dir)
+
+    MODEL_NAME = "mlxclip#" + clip.hf_repo
+
+    with open(_args.output, "w") as wr :
+
+        if _args.mode == "image":
+            img = Image.open(_args.input).convert("RGB")
+            out_buffer = BytesIO()
+            img.save(out_buffer, format="PNG")
+            img_bytes = out_buffer.getvalue()
+
+            temp_path = None
+            try:
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                    tmp_file.write(img_bytes)
+                    temp_path = tmp_file.name
+            
+                embedding = clip.image_encoder(temp_path)
+                json.dump({"embeddings": embedding, "model": MODEL_NAME}, wr)
+                    
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.remove(temp_path)
+                
+        else :
+            embedding = clip.text_encoder(_args.input)
+            json.dump({"embeddings": embedding, "model": MODEL_NAME}, wr)            
