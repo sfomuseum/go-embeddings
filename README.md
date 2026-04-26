@@ -203,6 +203,12 @@ Derive vector embeddings from a Python script using the [harperreed/mlx_clip](ht
 
 The option requires a device using an Apple Silicon chip and involves a non-zero manual set up process discussed below.
 
+#### Set up
+
+As of this writing I am not sure I have working set up instructions. Specifically you want something like the include code in the [mlxclip_py.txt](mlxclip_py.txt) file which in turn loads the [mlx_clip](https://github.com/harperreed/mlx_clip) library. Nothing fancy but since first getting this to work something has changed (?) that prevents Python from importing the `mlx_clip` package. This remains to be resolved.
+
+#### Command line (mlxclip://)
+
 ```
 mlxclip://{PATH_TO_EMBEDDINGS_DOT_PY}?{PARAMETERS}
 ```
@@ -211,11 +217,26 @@ Valid query parameters are:
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
+| model | string | yes | The path to directory with MLX-compatible model data. |
 | python | string | no | The path to the Python runtime to use. For example one created by a Python virtual environment. |
 
-#### Set up
+For example:
 
-As of this writing I am not sure I have working set up instructions. Specifically you want something like the include code in the [mlxclip_py.txt](mlxclip_py.txt) file which in turn loads the [mlx_clip](https://github.com/harperreed/mlx_clip) library. Nothing fancy but since first getting this to work something has changed (?) that prevents Python from importing the `mlx_clip` package. This remains to be resolved.
+```
+./bin/embeddings \
+	-client-uri 'mlxclip:///usr/local/src/mlxclip/mlx_cli.py?model=/usr/local/src/mlxclip/data/openai/clip-vit-base-patch32&python=/usr/local/src/mlxclip/bin/python' \
+	image \
+	test20.jpg
+	
+{"embeddings":[0.0049408292,0.034288883,... and so on
+```
+
+#### Client-server (mlxclip-client://)
+
+```
+$> echo "Hello world" | ./bin/embeddings -client-uri 'mlxclip-client://' text -
+{"embeddings":[0.008282159, ... and so on
+```
 
 #### See also
 

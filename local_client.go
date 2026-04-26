@@ -27,7 +27,7 @@ type LocalClientEmbeddingRequest struct {
 
 type LocalClientEmbeddingResponse struct {
 	Model      string    `json:"model,omitempty"`
-	Embeddings []float64 `json:"embedding,omitempty"`
+	Embeddings []float64 `json:"embeddings,omitempty"`
 }
 
 type LocalClient struct {

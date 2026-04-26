@@ -13,7 +13,7 @@ func TestOpenCLIPEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder32(ctx, "openclip://")
+	emb, err := NewEmbedder32(ctx, "openclip-client://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
@@ -38,7 +38,7 @@ func TestOpenCLIPImageEmbeddings(t *testing.T) {
 
 	ctx := context.Background()
 
-	emb, err := NewEmbedder32(ctx, "openclip://")
+	emb, err := NewEmbedder32(ctx, "openclip-client://")
 
 	if err != nil {
 		t.Fatalf("Failed to create embedder, %v", err)
