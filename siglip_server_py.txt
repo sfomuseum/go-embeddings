@@ -1,7 +1,7 @@
 import argparse
 import base64
 import os
-import io
+from io import BytesIO
 import logging
 
 import uvicorn
@@ -51,22 +51,23 @@ async def embeddings_image(payload: dict = Body(...)):
     try:
         img_b64 = payload["image_data"][0]["data"]
         img_data = base64.b64decode(img_b64)
-        
         img = Image.open(BytesIO(img_data)).convert("RGB")
-        inputs = processor(images=img, return_tensors="pt").to(device)
         
-        with torch.no_grad():
-            out = model.get_image_features(**inputs)
-            vec = out.pooler_output.squeeze(0)
-            
-        vec = torch.nn.functional.normalize(vec, p=2, dim=0)
-        rsp = vec.cpu().numpy()
-            
-        return {"embedding": rsp.tolist(), "model": _args.model_name}
-    
-    except:
-        log.error("Failed to derive embeddings")
+    except Exception as e:
+        log.error(f"Failed to parse image data, {e}")
         raise HTTPException(status_code=400, detail="Invalid image data")    
+        
+    inputs = processor(images=img, return_tensors="pt").to(device)
+        
+    with torch.no_grad():
+        out = model.get_image_features(**inputs)
+        vec = out.pooler_output.squeeze(0)
+        
+    vec = torch.nn.functional.normalize(vec, p=2, dim=0)
+    rsp = vec.cpu().numpy()
+    
+    return {"embedding": rsp.tolist(), "model": _args.model_name}
+    
 
 if __name__ == "__main__":
     uvicorn.run(app, host=_args.host, port=_args.port)
