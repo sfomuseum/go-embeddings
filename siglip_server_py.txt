@@ -66,7 +66,7 @@ async def embeddings_image(payload: dict = Body(...)):
     vec = torch.nn.functional.normalize(vec, p=2, dim=0)
     rsp = vec.cpu().numpy()
     
-    return {"embedding": rsp.tolist(), "model": _args.model_name}
+    return {"embeddings": rsp.tolist(), "model": _args.model_name}
     
 
 if __name__ == "__main__":
