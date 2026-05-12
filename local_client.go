@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
+	_ "log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -49,6 +49,11 @@ func NewLocalClient(ctx context.Context, uri string) (*LocalClient, error) {
 		return nil, err
 	}
 
+	if u.Scheme == "https" {
+		tls = true
+		port = ""
+	}
+
 	if u.Host != "" {
 		host = u.Host
 
@@ -64,8 +69,6 @@ func NewLocalClient(ctx context.Context, uri string) (*LocalClient, error) {
 	if u.Port() != "" {
 		port = u.Port()
 	}
-
-	slog.Debug("URL", "host", host, "port", port)
 
 	q := u.Query()
 
@@ -96,7 +99,12 @@ func (e *LocalClient) embeddings(ctx context.Context, local_req *LocalClientEmbe
 
 	u := url.URL{}
 	u.Scheme = "http"
-	u.Host = fmt.Sprintf("%s:%s", e.host, e.port)
+
+	u.Host = e.host
+
+	if e.port != "" {
+		u.Host = fmt.Sprintf("%s:%s", e.host, e.port)
+	}
 
 	if len(local_req.ImageData) > 0 {
 		u.Path = "/embeddings/image"
@@ -109,6 +117,8 @@ func (e *LocalClient) embeddings(ctx context.Context, local_req *LocalClientEmbe
 	}
 
 	endpoint := u.String()
+
+	// slog.Debug("Calling endpoint", "uri", endpoint)
 
 	enc_msg, err := json.Marshal(local_req)
 
