@@ -32,6 +32,8 @@ func NewRouteEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], er
 		return nil, err
 	}
 
+	q := u.Query()
+
 	precision := "float32"
 
 	switch {
@@ -40,6 +42,38 @@ func NewRouteEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], er
 	}
 
 	clients := make(map[string]Embedder[T])
+
+	client_uris := q["client-uri"]
+
+	if len(client_uris) == 0 {
+		return nil, fmt.Errorf("A minimum of (1) ?client-uri= parameters is required")
+	}
+
+	for _, str_spec := range client_uris {
+
+		spec := strings.SplitN(str_spec, " ", 2)
+
+		if len(spec) != 2 {
+			return nil, fmt.Errorf("?client-uri= parameter must be in the form of '{MODEL} {CLIENT_URI}'")
+		}
+
+		model := spec[0]
+		client_uri := spec[1]
+
+		_, exists := clients[model]
+
+		if exists {
+			return nil, fmt.Errorf("Model %s already registered", model)
+		}
+
+		cl, err := NewEmbedder[T](ctx, client_uri)
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to create new client for %s, %v", client_uri, err)
+		}
+
+		clients[model] = cl
+	}
 
 	e := &RouteEmbedder[T]{
 		precision: precision,
