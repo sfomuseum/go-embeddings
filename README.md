@@ -444,8 +444,10 @@ INFO:     127.0.0.1:61064 - "POST /embeddings HTTP/1.1" 200 OK
 Derive embeddings by routing requests to different underlying clients depending on the requested model. Clients and models are defined in one or more `?client-uri=` parameters which take the form of:
 
 ```      
-route://?client-uri=CLIENT_URI…MODEL…MODEL
+route://?client-uri=CLIENT_URI...MODEL...MODEL
 ```
+
+Any given `?client-uri=` parameter must have one or more `{MODEL}` definitions.
 
 For example:
 
