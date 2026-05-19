@@ -439,6 +439,25 @@ INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
 INFO:     127.0.0.1:61064 - "POST /embeddings HTTP/1.1" 200 OK
 ```
 
+### route://
+
+Derive embeddings by routing requests to different underlying clients depending on the requested model. Clients and models are defined in one or more `?client-uri=` parameters which take the form of:
+
+```      
+route://?client-uri=CLIENT_URI…MODEL…MODEL
+```
+
+For example:
+
+```
+$> echo "hello world" | \
+	./bin/embeddings \
+	-client-uri 'route://?client-uri=siglip-client://?server-uri=http://10.28.67.136:8087...google/siglip2-so400m-patch14-384&client-uri=siglip-client://?server-uri=http://10.28.67.136:8086...google/siglip2-so400m-patch16-naflex' \
+	-model google/siglip2-so400m-patch16-naflex \
+	text \
+	-
+```
+
 ### siglip://
 
 Derive vector embeddings from a Python script using the Google [SigLIP (2)](https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md) models.

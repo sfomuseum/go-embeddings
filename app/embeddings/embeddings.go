@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -22,6 +23,11 @@ func RunWithFlagSet(ctx context.Context, fs *flag.FlagSet) error {
 
 	flagset.Parse(fs)
 	args := fs.Args()
+
+	if verbose {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+		slog.Debug("Verbose logging enabled")
+	}
 
 	action := args[0]
 
@@ -80,6 +86,10 @@ func RunWithFlagSet(ctx context.Context, fs *flag.FlagSet) error {
 
 	default:
 		return fmt.Errorf("Invalid or unsuported action")
+	}
+
+	if model != "" {
+		embeddings_req.Model = model
 	}
 
 	switch precision {
