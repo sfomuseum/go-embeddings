@@ -9,7 +9,6 @@ import (
 
 // For example:
 
-
 // ROUTE_SEPARATOR is the token that separates the client URI from the
 // list of model names in the `client-uri` query parameter.  It is
 // defined here to make it easy to change the separator without
@@ -41,7 +40,7 @@ func init() {
 // NewRouteEmbedder creates a new RouteEmbedder from the supplied URI.
 // The URI must be in the form:
 //
-//     route://?client-uri=CLIENT_URI…MODEL…MODEL
+//	route://?client-uri=CLIENT_URI…MODEL…MODEL
 //
 // The client URI may be repeated to register multiple clients.
 // Each client URI is passed to NewEmbedder64 or NewEmbedder32
