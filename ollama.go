@@ -82,8 +82,12 @@ func (e *OllamaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsR
 		return nil, err
 	}
 
+	if len(cl_rsp.Embeddings) == 0 {
+		return nil, fmt.Errorf("Model returned no embeddings")
+	}
+	
 	e32 := cl_rsp.Embeddings[0]
-
+	
 	now := time.Now()
 	ts := now.Unix()
 
