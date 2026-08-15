@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -104,6 +105,11 @@ func (o *ollamaClient) execute(ctx context.Context, path string, r io.Reader) (i
 
 	if err != nil {
 		return nil, err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		rsp.Body.Close()
+		return nil, fmt.Errorf("HTTP request failed, %s", rsp.Status)
 	}
 
 	return rsp.Body, nil

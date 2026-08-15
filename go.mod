@@ -1,6 +1,6 @@
 module github.com/sfomuseum/go-embeddings
 
-go 1.26.0
+go 1.26.6
 
 require (
 	github.com/aaronland/go-roster v1.0.0
