@@ -119,4 +119,4 @@ func (e *MobileCLIPEmbedder[T]) mobileCLIPResponseToEmbeddingsResponse(req *Embe
 
 func (e *MobileCLIPEmbedder[T]) Close() error {
 	return nil
-}	
+}

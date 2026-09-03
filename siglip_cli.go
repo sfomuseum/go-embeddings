@@ -190,4 +190,4 @@ func (e *SigLIPCommandLineEmbedder[T]) generateEmbeddingsFromCommandLine(ctx con
 
 func (e *SigLIPCommandLineEmbedder[T]) Close() error {
 	return nil
-}	
+}

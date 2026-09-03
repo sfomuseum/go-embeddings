@@ -128,4 +128,4 @@ func (e *MLXClipLocalClientEmbedder[T]) localClientResponseToEmbeddingsResponse(
 
 func (e *MLXClipLocalClientEmbedder[T]) Close() error {
 	return nil
-}	
+}
