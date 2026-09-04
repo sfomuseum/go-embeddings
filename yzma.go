@@ -60,6 +60,8 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 
 	if lib_path == "" {
 
+		// To do: Check os.Getenv
+
 		dir, err := os.MkdirTemp("", "yzma")
 
 		if err != nil {
@@ -77,8 +79,6 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			return nil, err
 		}
 	}
-
-	os.Setenv("YZMA_LIB", lib_path)
 
 	model_root := filepath.Join(lib_path, "models")
 
@@ -101,8 +101,6 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		proc := q.Get("processor")
 		version := q.Get("version")
 
-		slog.Info("Download llama")
-
 		err := download.GetWithContext(ctx, arch, os, proc, version, lib_path, nil)
 
 		if err != nil {
@@ -110,7 +108,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		}
 	}
 
-	err = llama.Load(lib_path)
+	err := llama.Load(lib_path)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
@@ -122,7 +120,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	e := &YzmaEmbedder[T]{
 		precision:    precision,
 		scheme:       u.Scheme,
-		context_sz:   0,
+		context_sz:   512,
 		batch_sz:     2048,
 		pooling:      "mean",
 		pooling_type: llama.PoolingTypeMean,
@@ -144,7 +142,6 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 		return nil, err
 	}
 
-	slog.Info("OKAY MODEL")
 	defer llama.ModelFree(model)
 
 	model_ctx := llama.ContextDefaultParams()
@@ -184,7 +181,6 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 		return nil, fmt.Errorf("Failed to derive embeddings, %w", err)
 	}
 
-	// normalize embeddings
 	var sum float64
 
 	for _, v := range vec {
@@ -227,7 +223,13 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 }
 
 func (e *YzmaEmbedder[T]) Close() error {
+
 	llama.Close()
+
+	if e.tmp_dir != "" {
+		os.RemoveAll(e.tmp_dir)
+	}
+
 	return nil
 }
 
@@ -235,8 +237,6 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 
 	model_fname := filepath.Base(req.Model)
 	model_path := filepath.Join(e.model_root, model_fname)
-
-	slog.Info("MODEL PATH", "path", model_path)
 
 	_, err := os.Stat(model_path)
 
@@ -246,6 +246,8 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 			return 0, err
 		}
 
+		// To do: Ensure http(s)
+
 		slog.Info("Download model", "model", req.Model)
 		err := download.GetModelWithContext(ctx, req.Model, e.model_root, nil)
 
@@ -253,7 +255,7 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 			return 0, err
 		}
 
-		_, err := os.Stat(model_path)
+		_, err = os.Stat(model_path)
 
 		if err != nil {
 			return 0, err
