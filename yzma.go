@@ -3,6 +3,7 @@ package embeddings
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/url"
 	"os"
@@ -24,6 +25,9 @@ type YzmaEmbedder[T Float] struct {
 	batch_sz     int
 	pooling      string
 	pooling_type llama.PoolingType
+	model_root   string
+	tmp_dir      string
+	lib_path     string
 }
 
 func init() {
@@ -42,6 +46,8 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, err
 	}
 
+	q := u.Query()
+
 	precision := "float32"
 
 	switch {
@@ -50,6 +56,41 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	}
 
 	lib_path := u.Path
+	tmp_dir := ""
+
+	if lib_path == "" {
+
+		dir, err := os.MkdirTemp("", "yzma")
+
+		if err != nil {
+			return nil, err
+		}
+
+		lib_path = dir
+		tmp_dir = dir
+
+	} else {
+
+		err := os.MkdirAll(lib_path, 0750)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	os.Setenv("YZMA_LIB", lib_path)
+
+	model_root := filepath.Join(lib_path, "models")
+
+	if q.Has("model-root") && q.Get("model-root") != "" {
+		model_root = q.Get("model-root")
+	}
+
+	err = os.MkdirAll(model_root, 0750)
+
+	if err != nil {
+		return nil, err
+	}
 
 	if !download.AlreadyInstalled(lib_path) {
 
@@ -57,22 +98,25 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 
 		arch := runtime.GOARCH
 		os := runtime.GOOS
-		proc := ""
-		version := "latest"
+		proc := q.Get("processor")
+		version := q.Get("version")
+
+		slog.Info("Download llama")
 
 		err := download.GetWithContext(ctx, arch, os, proc, version, lib_path, nil)
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Failed to download llama, %w", err)
 		}
 	}
 
 	err = llama.Load(lib_path)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
 
+	llama.LogSet(llama.LogSilent())
 	llama.Init()
 
 	e := &YzmaEmbedder[T]{
@@ -81,7 +125,10 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		context_sz:   0,
 		batch_sz:     2048,
 		pooling:      "mean",
-		pooling_type: llama.PoolingTypeUnspecified,
+		pooling_type: llama.PoolingTypeMean,
+		model_root:   model_root,
+		tmp_dir:      tmp_dir,
+		lib_path:     lib_path,
 	}
 
 	return e, nil
@@ -97,10 +144,7 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 		return nil, err
 	}
 
-	if model == 0 {
-		return nil, fmt.Errorf("Unable to load model")
-	}
-
+	slog.Info("OKAY MODEL")
 	defer llama.ModelFree(model)
 
 	model_ctx := llama.ContextDefaultParams()
@@ -109,35 +153,35 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 	model_ctx.PoolingType = e.pooling_type
 	model_ctx.Embeddings = 1
 
-	lctx, err := llama.InitFromModel(model, model_ctx)
+	emb_ctx, err := llama.InitFromModel(model, model_ctx)
 
 	if err != nil {
 		return nil, fmt.Errorf("Unable to initialize context from model, %w", err)
 	}
 
-	defer llama.Free(lctx)
+	defer llama.Free(emb_ctx)
 
 	vocab := llama.ModelGetVocab(model)
 	tokens := llama.Tokenize(vocab, string(req.Body), true, true)
 
 	batch := llama.BatchGetOne(tokens)
 
-	ret, err := llama.Decode(lctx, batch)
+	ret, err := llama.Decode(emb_ctx, batch)
 
 	if err != nil {
-		return nil, fmt.Errorf("decode failed: %w", err)
+		return nil, fmt.Errorf("Failed to decode token btach, %w", err)
 	}
 
 	if ret != 0 {
-		return nil, fmt.Errorf("decode returned non-zero: %d", ret)
+		return nil, fmt.Errorf("Decode operation returned non-zero response, %d", ret)
 	}
 
 	nEmbd := llama.ModelNEmbd(model)
 
-	vec, err := llama.GetEmbeddingsSeq(lctx, 0, nEmbd)
+	vec, err := llama.GetEmbeddingsSeq(emb_ctx, 0, nEmbd)
 
 	if err != nil {
-		return nil, fmt.Errorf("unable to get embeddings: %v", err)
+		return nil, fmt.Errorf("Failed to derive embeddings, %w", err)
 	}
 
 	// normalize embeddings
@@ -189,8 +233,10 @@ func (e *YzmaEmbedder[T]) Close() error {
 
 func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *EmbeddingsRequest) (llama.Model, error) {
 
-	var model_root string
-	var model_path string
+	model_fname := filepath.Base(req.Model)
+	model_path := filepath.Join(e.model_root, model_fname)
+
+	slog.Info("MODEL PATH", "path", model_path)
 
 	_, err := os.Stat(model_path)
 
@@ -200,19 +246,32 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 			return 0, err
 		}
 
-		err := download.GetModelWithContext(ctx, req.Model, model_root, nil)
+		slog.Info("Download model", "model", req.Model)
+		err := download.GetModelWithContext(ctx, req.Model, e.model_root, nil)
+
+		if err != nil {
+			return 0, err
+		}
+
+		_, err := os.Stat(model_path)
 
 		if err != nil {
 			return 0, err
 		}
 	}
 
+	slog.Info("LOAD FROM FILE", "path", model_path)
+
 	params := llama.ModelDefaultParams()
 
 	model, err := llama.ModelLoadFromFile(model_path, params)
 
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("Failed to load model, %w", err)
+	}
+
+	if model == 0 {
+		return 0, fmt.Errorf("Unable to load model")
 	}
 
 	return model, nil
