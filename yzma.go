@@ -16,7 +16,7 @@ import (
 	"github.com/hybridgroup/yzma/pkg/llama"
 )
 
-// YzmaEmbedder implements the `Embedder` interface using an Yzma API endpoint to derive embeddings.
+// YzmaEmbedder implements the `Embedder` interface using the `hybridgroup/yzma` package to derive embeddings.
 type YzmaEmbedder[T Float] struct {
 	Embedder[T]
 	precision    string
@@ -43,7 +43,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	u, err := url.Parse(uri)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to parse URI, %w", err)
 	}
 
 	q := u.Query()
@@ -59,13 +59,15 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	tmp_dir := ""
 
 	if lib_path == "" {
+		lib_path = os.Getenv("YZMA_LIB")
+	}
 
-		// To do: Check os.Getenv
+	if lib_path == "" {
 
 		dir, err := os.MkdirTemp("", "yzma")
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Failed to create tmp llama root, %w", err)
 		}
 
 		lib_path = dir
@@ -76,7 +78,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		err := os.MkdirAll(lib_path, 0750)
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Failed to create llama root, %w", err)
 		}
 	}
 
@@ -89,7 +91,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	err = os.MkdirAll(model_root, 0750)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to create model root, %w", err)
 	}
 
 	if !download.AlreadyInstalled(lib_path) {
@@ -101,6 +103,9 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		proc := q.Get("processor")
 		version := q.Get("version")
 
+		// To do: Better progress indicator...
+
+		slog.Debug("Download llama", "arch", arch, "os", os, "proc", proc, "version", version)
 		err := download.GetWithContext(ctx, arch, os, proc, version, lib_path, nil)
 
 		if err != nil {
@@ -108,7 +113,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		}
 	}
 
-	err := llama.Load(lib_path)
+	err = llama.Load(lib_path)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
@@ -120,7 +125,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	e := &YzmaEmbedder[T]{
 		precision:    precision,
 		scheme:       u.Scheme,
-		context_sz:   512,
+		context_sz:   0,
 		batch_sz:     2048,
 		pooling:      "mean",
 		pooling_type: llama.PoolingTypeMean,
@@ -139,7 +144,7 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 	model, err := e.getModelForRequest(ctx, req)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to instantiate model, %w", err)
 	}
 
 	defer llama.ModelFree(model)
@@ -199,6 +204,8 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 	now := time.Now()
 	ts := now.Unix()
 
+	// To do: Try to capture source/publisher for the model URI
+
 	model_name := filepath.Base(req.Model)
 
 	rsp := &CommonEmbeddingsResponse[T]{
@@ -246,23 +253,36 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 			return 0, err
 		}
 
-		// To do: Ensure http(s)
-
-		slog.Info("Download model", "model", req.Model)
-		err := download.GetModelWithContext(ctx, req.Model, e.model_root, nil)
+		u, err := url.Parse(req.Model)
 
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("Failed to parse model URI, %w", err)
+		}
+
+		switch u.Scheme {
+		case "http", "https":
+
+			// To do: Better progress indicator...
+
+			slog.Debug("Download model", "model", req.Model)
+			err := download.GetModelWithContext(ctx, req.Model, e.model_root, nil)
+
+			if err != nil {
+				return 0, fmt.Errorf("Failed to retrieve model, %w", err)
+			}
+
+		case "file":
+			model_path = u.Path
+		default:
+			return 0, fmt.Errorf("Unsupported model scheme")
 		}
 
 		_, err = os.Stat(model_path)
 
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("Model path does not exist, %w", err)
 		}
 	}
-
-	slog.Info("LOAD FROM FILE", "path", model_path)
 
 	params := llama.ModelDefaultParams()
 
