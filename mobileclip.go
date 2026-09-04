@@ -116,3 +116,7 @@ func (e *MobileCLIPEmbedder[T]) mobileCLIPResponseToEmbeddingsResponse(req *Embe
 
 	return rsp
 }
+
+func (e *MobileCLIPEmbedder[T]) Close() error {
+	return nil
+}

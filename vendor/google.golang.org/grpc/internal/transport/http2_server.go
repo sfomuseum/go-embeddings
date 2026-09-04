@@ -407,7 +407,7 @@ func (t *http2Server) operateHeaders(ctx context.Context, frame *http2.MetaHeade
 		st:               t,
 		headerWireLength: int(frame.Header().Length),
 	}
-	s.Stream.buf.init(t.bufferPool)
+	s.Stream.buf.init()
 	var (
 		// if false, content-type was missing or invalid
 		isGRPC      = false

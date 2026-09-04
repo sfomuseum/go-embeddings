@@ -53,6 +53,10 @@ func (e *NullEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 	return e.nullEmbeddings(ctx, req)
 }
 
+func (e *NullEmbedder[T]) Close() error {
+	return nil
+}
+
 func (e *NullEmbedder[T]) nullEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	now := time.Now()

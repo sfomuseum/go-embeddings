@@ -133,3 +133,7 @@ func (e *LlamafileEmbedder[T]) llamafileResponseToEmbeddingsResponse(req *Embedd
 
 	return rsp
 }
+
+func (e *LlamafileEmbedder[T]) Close() error {
+	return nil
+}

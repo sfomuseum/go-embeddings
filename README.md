@@ -546,6 +546,60 @@ INFO:     Uvicorn running on http://localhost:5000 (Press CTRL+C to quit)
 * https://huggingface.co/google/siglip-base-patch16-224
 * https://huggingface.co/google/siglip-so400m-patch14-384
 
+### yzma://
+
+Derive vector embeddings using the [hybridgroup/yzma](https://github.com/hybridgroup/yzma) Go package which wraps a local instance of `llama.cpp`.
+
+```
+yzma://{PATH_TO_YZMA_LIB}?{QUERY_PARAMETERS)
+```
+
+Where `{PATH_TO_YZMA}` is the path the yzma-specific llama.cpp build. If empty then the code will check for a `YZMA_LIB` environment variable. If the path remains empty then a temporary directory will be created and an device-specific build will be downloaded. Valid query parameters are:
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+
+| context-size | int | no | Maximum number of tokens in a llama context. If omitted, the default of 0 (use library default) is used. |
+| batch-size | int | no | Maximum number of tokens processed per batch. If omitted, the default of 0 (use library default) is used. |
+| pooling | string | no  Pooling strategy used to aggregate token embeddings.  Accepted values are the same strings that the `llama.PoolingType` type understands (e.g. `"mean"`, `"sum"`).  The default is `"mean"`. |
+| processor | string | no | Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will automatically select an appropriate processor. |
+| version | string | no | The yzma release version to download.  The  default is `"v0.3.0"`.  The value should be a full git tag (e.g. `v0.3.0`), not an empty string. |
+| model-root | string | no | Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root (`lib_path`) is used. |
+
+For example:
+
+```
+$> ./bin/embeddings \
+	-verbose \
+	-client-uri 'yzma:///usr/local/sfomuseum/src/yzma-llama2' \
+	-model https://huggingface.co/QuantFactory/SmolLM2-135M-GGUF/resolve/main/SmolLM2-135M.Q4_K_M.gguf \
+	text README.md
+
+2026/09/04 15:59:19 DEBUG Verbose logging enabled
+2026/09/04 15:59:19 DEBUG Reassign batch size based on input old=0 new=6448
+{"embeddings":[-0.00427622,-0.00952815,-0.028462801,0.010853989,-0.0005393807 ... and so on
+```
+
+Or to download all the components at runtime:
+
+```
+$> ./bin/embeddings \
+	-verbose \
+	-client-uri 'yzma://' \
+	-model https://huggingface.co/QuantFactory/SmolLM2-135M-GGUF/resolve/main/SmolLM2-135M.Q4_K_M.gguf \
+	text README.md
+
+2026/09/04 16:11:07 DEBUG Verbose logging enabled
+2026/09/04 16:11:07 DEBUG Download llama arch=arm64 os=darwin proc=metal version=v0.3.0
+[##################################################]  100.0% - 10/10 MiB (5.62 MiB/s)
+2026/09/04 16:11:16 DEBUG Download model model=https://huggingface.co/QuantFactory/SmolLM2-135M-GGUF/resolve/main/SmolLM2-135M.Q4_K_M.gguf target=/var/folders/_k/h7ndzcyx3dq027gsrg1q45xm0000gn/T/yzma3627492138/models
+2026/09/04 16:11:56 DEBUG Reassign batch size based on input old=0 new=6590
+
+{"embeddings":[-0.011574293,-0.009547655, ...and so on
+
+2026/09/04 16:11:58 DEBUG Remove tmp dir path=/var/folders/_k/h7ndzcyx3dq027gsrg1q45xm0000gn/T/yzma3627492138
+```
+
 ## Tests
 
 Because so many of the implementations above depend on the availability of external, third-party services their tests depend on the presence of Go build tags to run. They are :
@@ -559,3 +613,4 @@ Because so many of the implementations above depend on the availability of exter
 | ollama:// | ollama |
 | openclip:// | openclip |
 | siglip:// | siglip |
+| yzma:// | _not implemented yet_ |

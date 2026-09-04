@@ -101,6 +101,8 @@ func RunWithFlagSet(ctx context.Context, fs *flag.FlagSet) error {
 			return fmt.Errorf("Failed to create embedder, %w", err)
 		}
 
+		defer cl.Close()
+
 		switch action {
 		case "text":
 			embeddings_rsp, embeddings_err = cl.TextEmbeddings(ctx, embeddings_req)
@@ -117,6 +119,8 @@ func RunWithFlagSet(ctx context.Context, fs *flag.FlagSet) error {
 		if err != nil {
 			return fmt.Errorf("Failed to create embedder, %w", err)
 		}
+
+		defer cl.Close()
 
 		switch action {
 		case "text":

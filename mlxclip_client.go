@@ -125,3 +125,7 @@ func (e *MLXClipLocalClientEmbedder[T]) localClientResponseToEmbeddingsResponse(
 
 	return rsp
 }
+
+func (e *MLXClipLocalClientEmbedder[T]) Close() error {
+	return nil
+}

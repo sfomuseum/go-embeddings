@@ -14,6 +14,7 @@ import (
 type Embedder[T Float] interface {
 	TextEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
 	ImageEmbeddings(context.Context, *EmbeddingsRequest) (EmbeddingsResponse[T], error)
+	Close() error
 }
 
 // EmbedderInitializationFunc is a function defined by individual embedder package and used to create

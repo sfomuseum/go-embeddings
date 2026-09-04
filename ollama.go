@@ -121,3 +121,7 @@ func (e *OllamaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsR
 func (e *OllamaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 	return nil, NotImplemented
 }
+
+func (e *OllamaEmbedder[T]) Close() error {
+	return nil
+}

@@ -187,3 +187,7 @@ func (e *SigLIPCommandLineEmbedder[T]) generateEmbeddingsFromCommandLine(ctx con
 
 	return rsp, nil
 }
+
+func (e *SigLIPCommandLineEmbedder[T]) Close() error {
+	return nil
+}

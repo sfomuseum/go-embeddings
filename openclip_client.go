@@ -120,3 +120,7 @@ func (e *OpenCLIPEmbedder[T]) localClientResponseToEmbeddingsResponse(req *Embed
 
 	return rsp
 }
+
+func (e *OpenCLIPEmbedder[T]) Close() error {
+	return nil
+}
