@@ -142,12 +142,12 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			proc = "metal"
 		}
 
-		// Don't be surprised if "latest" is out of sync with the versioned release of yzma.
-		// A version number of "" does not seem to work as advertised so the safest thing is
-		// to reference an explcit version number specific to the yzma release:
-		// https://github.com/hybridgroup/yzma#required-versions-of-llamacpp
+		// "A tagged release of yzma installs its own llama.cpp release by default, so yzma install
+		// without the -version flag gets the version in this table. Use -version latest to get the
+		// most recent nightly build instead. A build from the main branch always uses the most recent
+		// nightly build." - https://github.com/hybridgroup/yzma#required-versions-of-llamacpp
 
-		version := "v0.3.0"
+		version := ""
 
 		if q.Has("version") {
 			version = q.Get("version")

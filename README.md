@@ -563,7 +563,7 @@ Where `{PATH_TO_YZMA}` is the path the yzma-specific llama.cpp build. If empty t
 | batch-size | int | no | Maximum number of tokens processed per batch. If omitted, the default of 0 (use library default) is used. |
 | pooling | string | no  Pooling strategy used to aggregate token embeddings.  Accepted values are the same strings that the `llama.PoolingType` type understands (e.g. `"mean"`, `"sum"`).  The default is `"mean"`. |
 | processor | string | no | Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will automatically select an appropriate processor. |
-| version | string | no | The yzma release version to download.  The  default is `"v0.3.0"`.  The value should be a full git tag (e.g. `v0.3.0`), not an empty string. |
+| version | string | no | The yzma release version to download.  The  default is "" which corresponding to the most recently tagged release of `hybridgroup/yzma`. |
 | model-root | string | no | Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root (`lib_path`) is used. |
 
 For example:
@@ -613,4 +613,4 @@ Because so many of the implementations above depend on the availability of exter
 | ollama:// | ollama |
 | openclip:// | openclip |
 | siglip:// | siglip |
-| yzma:// | _not implemented yet_ |
+| yzma:// | yzma |

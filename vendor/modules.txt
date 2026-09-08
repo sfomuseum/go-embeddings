@@ -330,7 +330,7 @@ github.com/hashicorp/go-getter/helper/url
 # github.com/hashicorp/go-version v1.8.0
 ## explicit
 github.com/hashicorp/go-version
-# github.com/hybridgroup/yzma v1.25.0
+# github.com/hybridgroup/yzma v1.26.1
 ## explicit; go 1.26.0
 github.com/hybridgroup/yzma/pkg/download
 github.com/hybridgroup/yzma/pkg/llama
