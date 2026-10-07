@@ -24,6 +24,7 @@ var (
 	ErrUnknownProcessor = errors.New("unknown processor")
 	ErrInvalidVersion   = errors.New("invalid version")
 	ErrFileNotFound     = errors.New("could not download file: the requested llama.cpp version may still be building for your platform.")
+	ErrUnsafeArchive    = errors.New("unsafe archive")
 )
 
 var (
@@ -53,7 +54,7 @@ var (
 	// releasePattern is the format of a llama.cpp tagged release, for example "v0.3.0".
 	releasePattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+`)
 
-	// nightlyTagURL is the URL of the asset in a tagged llama.cpp release that gives
+	// nightlyTagURL is the URL of the asset in a tagged llama.cpp release that holds
 	// the nightly build tag. A tagged release has no binaries of its own.
 	// https://github.com/ggml-org/llama.cpp/releases
 	nightlyTagURL = "https://github.com/ggml-org/llama.cpp/releases/download/%s/nightly-tag.txt"
@@ -83,8 +84,8 @@ func getLatestVersion() (string, error) {
 	return file.TagName, nil
 }
 
-// versionFile is what version.json and previous.json hold. Only the tag has always
-// been there, so a file with no digest is a file for a release that published none.
+// versionFile is the content of version.json and previous.json. Only the tag has always
+// been there, so a file with no digest is for a release that published none.
 type versionFile struct {
 	// TagName is the llama.cpp release tag.
 	TagName string `json:"tag_name"`
@@ -97,8 +98,8 @@ type versionFile struct {
 	Pin string `json:"pin"`
 }
 
-// getVersionFile reads one of the version files. The tag must be valid, because that
-// is the field every caller needs.
+// getVersionFile reads one of the version files. The tag must be valid, because every
+// caller needs it.
 func getVersionFile(url string) (versionFile, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -181,7 +182,7 @@ var getFunc = get
 // Get downloads the llama.cpp precompiled binaries for the desired arch/OS/processor.
 // arch can be one of the following values: "amd64", "arm64".
 // os can be one of the following values: "linux", "darwin", "windows", "bookworm", "trixie".
-// processor can be one of the following values: "cpu", "cuda", "metal", "rocm", "vulkan".
+// processor can be one of the following values: "cpu", "cuda", "metal", "openvino", "rocm", "vulkan".
 // version should be the desired llama.cpp version, either a `b1234` nightly build
 // or a `v1.2.3` tagged release. If an empty
 // string ("") or "latest" is provided, the latest release will be downloaded,
@@ -195,7 +196,7 @@ func Get(architecture string, operatingSystem string, processor string, version 
 // using the provided progress tracker.
 // arch can be one of the following values: "amd64", "arm64".
 // os can be one of the following values: "linux", "darwin", "windows", "bookworm", "trixie".
-// processor can be one of the following values: "cpu", "cuda", "metal", "rocm", "vulkan".
+// processor can be one of the following values: "cpu", "cuda", "metal", "openvino", "rocm", "vulkan".
 // version should be the desired llama.cpp version, either a `b1234` nightly build
 // or a `v1.2.3` tagged release. If an empty
 // string ("") or "latest" is provided, the latest release will be downloaded,
@@ -209,7 +210,7 @@ func GetWithProgress(architecture string, operatingSystem string, processor stri
 // using the provided context and progress tracker.
 // arch can be one of the following values: "amd64", "arm64".
 // os can be one of the following values: "linux", "darwin", "windows", "bookworm", "trixie".
-// processor can be one of the following values: "cpu", "cuda", "metal", "rocm", "vulkan".
+// processor can be one of the following values: "cpu", "cuda", "metal", "openvino", "rocm", "vulkan".
 // version should be the desired llama.cpp version, either a `b1234` nightly build
 // or a `v1.2.3` tagged release. If an empty
 // string ("") or "latest" is provided, the latest release will be downloaded,
@@ -243,7 +244,7 @@ func get(ctx context.Context, asset Asset, dest string, progress getter.Progress
 	}
 
 	// Use go-getter for other file types (e.g., .zip). go-getter checks the digest
-	// itself and does not unpack an archive that does not agree.
+	// itself and does not unpack an archive that fails the check.
 	src := url
 	if asset.SHA256 != "" {
 		src += "?checksum=sha256:" + asset.SHA256
@@ -270,8 +271,8 @@ func get(ctx context.Context, asset Asset, dest string, progress getter.Progress
 	return nil
 }
 
-// isNotFound tells if go-getter stopped because the server answered 404. It reads the
-// message of go-getter, which gives no error value of its own.
+// isNotFound reports whether go-getter stopped because the server returned 404. It
+// parses the go-getter message, since go-getter has no error value for this.
 func isNotFound(err error) bool {
 	return strings.Contains(err.Error(), "bad response code: 404")
 }
@@ -317,10 +318,18 @@ func downloadAndExtractTarGz(asset Asset, dest string, progress getter.ProgressT
 	}
 	defer gzr.Close()
 
-	// Create tar reader
-	tr := tar.NewReader(gzr)
+	return extractTar(tar.NewReader(gzr), dest)
+}
 
-	// Extract files
+// extractTar extracts tr into dest. Every write goes through an os.Root, so no
+// entry or symlink can place a file outside dest.
+func extractTar(tr *tar.Reader, dest string) error {
+	root, err := os.OpenRoot(dest)
+	if err != nil {
+		return fmt.Errorf("failed to open %s: %w", dest, err)
+	}
+	defer root.Close()
+
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -341,27 +350,30 @@ func downloadAndExtractTarGz(asset Asset, dest string, progress getter.ProgressT
 			continue
 		}
 
-		target := filepath.Join(dest, filepath.Clean(name))
+		target := filepath.Clean(filepath.FromSlash(name))
+		if !filepath.IsLocal(target) {
+			return fmt.Errorf("%w: tar entry %q is outside the destination", ErrUnsafeArchive, header.Name)
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
+			if err := root.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 		case tar.TypeReg:
 			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			if err := root.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 
 			// Remove any existing entry first, so an upgrade replaces it instead of
 			// writing through a stale symlink left by a previous install.
-			if err := removeExisting(target); err != nil {
+			if err := removeExisting(root, target); err != nil {
 				return err
 			}
 
 			// Create the file
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
+			f, err := root.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}
@@ -373,19 +385,25 @@ func downloadAndExtractTarGz(asset Asset, dest string, progress getter.ProgressT
 			}
 			f.Close()
 		case tar.TypeSymlink:
+			// The loader follows these symlinks outside the os.Root, so the target must stay in dest too.
+			link := filepath.FromSlash(header.Linkname)
+			if filepath.IsAbs(link) || !filepath.IsLocal(filepath.Join(filepath.Dir(target), link)) {
+				return fmt.Errorf("%w: symlink %q points outside the destination", ErrUnsafeArchive, header.Name)
+			}
+
 			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			if err := root.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 
 			// Remove any existing entry first. Keeping it would leave the version
 			// symlinks (e.g. libllama.dylib) pointing at the previously installed
 			// build, so an upgrade would have no effect at load time.
-			if err := removeExisting(target); err != nil {
+			if err := removeExisting(root, target); err != nil {
 				return err
 			}
 
-			if err := os.Symlink(header.Linkname, target); err != nil {
+			if err := root.Symlink(header.Linkname, target); err != nil {
 				return fmt.Errorf("failed to create symlink: %w", err)
 			}
 		}
@@ -396,8 +414,8 @@ func downloadAndExtractTarGz(asset Asset, dest string, progress getter.ProgressT
 
 // removeExisting removes target unless it is already absent or a directory,
 // which is left alone so extraction can populate it.
-func removeExisting(target string) error {
-	fi, err := os.Lstat(target)
+func removeExisting(root *os.Root, target string) error {
+	fi, err := root.Lstat(target)
 	switch {
 	case os.IsNotExist(err):
 		return nil
@@ -407,7 +425,7 @@ func removeExisting(target string) error {
 		return nil
 	}
 
-	if err := os.Remove(target); err != nil {
+	if err := root.Remove(target); err != nil {
 		return fmt.Errorf("failed to remove existing %s: %w", target, err)
 	}
 
@@ -423,14 +441,14 @@ func VersionIsValid(version string) error {
 	return nil
 }
 
-// IsTaggedRelease tells if version is a tagged llama.cpp release such as "v0.3.0",
+// IsTaggedRelease reports whether version is a tagged llama.cpp release such as "v0.3.0",
 // which needs [LlamaNightlyTag] to find the build with the binaries.
 func IsTaggedRelease(version string) bool {
 	return releasePattern.MatchString(version)
 }
 
 // LlamaNightlyTag returns the nightly build tag that has the binaries for a llama.cpp
-// version. A nightly tag such as "b10620" gives itself. A tagged release such as
+// version. A nightly tag such as "b10620" returns itself. A tagged release such as
 // "v0.3.0" has no binaries of its own, so the nightly build tag comes from the
 // nightly-tag.txt asset of that release.
 func LlamaNightlyTag(version string) (string, error) {

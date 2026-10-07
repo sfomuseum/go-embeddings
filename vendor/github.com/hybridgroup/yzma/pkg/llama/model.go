@@ -3,6 +3,7 @@ package llama
 import (
 	"errors"
 	"os"
+	"sync"
 	"unsafe"
 
 	"github.com/hybridgroup/yzma/pkg/loader"
@@ -388,10 +389,17 @@ func ModelFree(model Model) error {
 }
 
 // InitFromModel initializes a previously loaded Model, and then returns a new Context.
+// A NThreads of 0 comes from [ModelThreads] and a NThreadsBatch of 0 from [Threads].
 func InitFromModel(model Model, params ContextParams) (Context, error) {
 	var ctx Context
 	if model == 0 {
 		return ctx, errors.New("invalid model")
+	}
+	if params.NThreads == 0 {
+		params.NThreads = ModelThreads(model)
+	}
+	if params.NThreadsBatch == 0 {
+		params.NThreadsBatch = Threads()
 	}
 	initFromModelFunc.Call(unsafe.Pointer(&ctx), unsafe.Pointer(&model), unsafe.Pointer(&params))
 
@@ -653,13 +661,13 @@ func ModelRopeFreqScaleTrain(model Model) float32 {
 }
 
 // ModelRopeType retrieves the RoPE type of the model.
-func ModelRopeType(model Model) RopeScalingType {
+func ModelRopeType(model Model) RoPEType {
 	if model == 0 {
-		return RopeScalingTypeNone
+		return RoPETypeNone
 	}
 	var ropeType ffi.Arg
 	modelRopeTypeFunc.Call(unsafe.Pointer(&ropeType), unsafe.Pointer(&model))
-	return RopeScalingType(int32(ropeType))
+	return RoPEType(int32(ropeType))
 }
 
 // Warmup is to warm-up a model.
@@ -872,29 +880,33 @@ func (p *ModelParams) SetTensorBufOverrides(overrides []TensorBuftOverride) erro
 	return nil
 }
 
-var progressCallbackCode unsafe.Pointer
-var progressCallbackCif *ffi.Cif
-var sizeOfClosure = unsafe.Sizeof(ffi.Closure{})
+var (
+	progressCallbackCif  *ffi.Cif
+	progressCallbackFn   uintptr
+	progressCallbackOnce sync.Once
+	progressCallbacks    sync.Map // closure address to ProgressCallback
+	progressClosures     sync.Map // code address to *ffi.Closure
+	sizeOfClosure        = unsafe.Sizeof(ffi.Closure{})
+)
 
-// SetProgressCallback sets a progress callback for model loading.
-func (p *ModelParams) SetProgressCallback(cb ProgressCallback) {
-	if cb == nil {
-		p.ProgressCallback = uintptr(0)
-		return
-	}
-
-	closure := ffi.ClosureAlloc(sizeOfClosure, &progressCallbackCode)
-
-	fn := ffi.NewCallback(func(cif *ffi.Cif, ret unsafe.Pointer, args *unsafe.Pointer, userData unsafe.Pointer) uintptr {
+// initProgressCallback creates the one Go callback that every progress closure
+// shares, since purego callback slots are never released.
+func initProgressCallback() {
+	progressCallbackFn = ffi.NewCallback(func(cif *ffi.Cif, ret unsafe.Pointer, args *unsafe.Pointer, userData unsafe.Pointer) uintptr {
 		if args == nil || ret == nil {
 			return 1 // error
+		}
+
+		v, ok := progressCallbacks.Load(uintptr(userData))
+		if !ok {
+			*(*uint8)(ret) = 1
+			return 0
 		}
 
 		arg := unsafe.Slice(args, cif.NArgs)
 		progress := *(*float32)(arg[0])
 		userDataPtr := *(*uintptr)(arg[1])
-		result := cb(progress, userDataPtr)
-		*(*uint8)(ret) = result
+		*(*uint8)(ret) = v.(ProgressCallback)(progress, userDataPtr)
 		return 0
 	})
 
@@ -902,11 +914,41 @@ func (p *ModelParams) SetProgressCallback(cb ProgressCallback) {
 	if status := ffi.PrepCif(progressCallbackCif, ffi.DefaultAbi, 2, &ffi.TypeUint8, &ffi.TypeFloat, &ffi.TypePointer); status != ffi.OK {
 		panic(status)
 	}
+}
 
-	if closure != nil {
-		if status := ffi.PrepClosureLoc(closure, progressCallbackCif, fn, nil, progressCallbackCode); status != ffi.OK {
-			panic(status)
-		}
+// freeProgressCallback frees a closure made by SetProgressCallback. Any other code address is left alone.
+func freeProgressCallback(code uintptr) {
+	v, ok := progressClosures.LoadAndDelete(code)
+	if !ok {
+		return
+	}
+	closure := v.(*ffi.Closure)
+	progressCallbacks.Delete(uintptr(unsafe.Pointer(closure)))
+	ffi.ClosureFree(closure)
+}
+
+// SetProgressCallback sets a progress callback for model loading. Pass nil to clear it.
+// It frees the closure set before, so do not load with a copy of p made before this call.
+func (p *ModelParams) SetProgressCallback(cb ProgressCallback) {
+	freeProgressCallback(p.ProgressCallback)
+	if cb == nil {
+		p.ProgressCallback = uintptr(0)
+		return
+	}
+
+	progressCallbackOnce.Do(initProgressCallback)
+
+	var progressCallbackCode unsafe.Pointer
+	closure := ffi.ClosureAlloc(sizeOfClosure, &progressCallbackCode)
+	if closure == nil {
+		p.ProgressCallback = uintptr(0)
+		return
+	}
+
+	progressCallbacks.Store(uintptr(unsafe.Pointer(closure)), cb)
+	progressClosures.Store(uintptr(progressCallbackCode), closure)
+	if status := ffi.PrepClosureLoc(closure, progressCallbackCif, progressCallbackFn, unsafe.Pointer(closure), progressCallbackCode); status != ffi.OK {
+		panic(status)
 	}
 
 	p.ProgressCallback = uintptr(progressCallbackCode)
@@ -916,6 +958,10 @@ func (p *ModelParams) SetProgressCallback(cb ProgressCallback) {
 // The slice must be NULL-terminated: the last element must be 0.
 // The caller must keep the slice alive (e.g., via runtime.KeepAlive) until
 // the model load call using these params completes.
+//
+// To run on the CPU, use [ModelParams.SetCPUOnly] instead of naming the CPU
+// here. llama.cpp creates a second CPU backend for a device list and runs the
+// graph on it, which leaves the context's thread pool with no work.
 func (p *ModelParams) SetDevices(devices []GGMLBackendDevice) error {
 	if len(devices) == 0 {
 		p.Devices = uintptr(0)
@@ -929,6 +975,19 @@ func (p *ModelParams) SetDevices(devices []GGMLBackendDevice) error {
 	p.Devices = uintptr(unsafe.Pointer(&devices[0]))
 
 	return nil
+}
+
+// SetCPUOnly makes the model run on the CPU. It keeps every layer in system
+// memory and names no device.
+//
+// This is the right way to run on the CPU. A device list that names the CPU
+// makes llama.cpp create a second CPU backend and run the graph on it, while
+// [AttachThreadpool] attaches the pool to the first one. The system then
+// places the threads, which costs speed on a hybrid machine. See
+// [NewPerformanceThreadpool].
+func (p *ModelParams) SetCPUOnly() {
+	p.NGpuLayers = 0
+	p.Devices = uintptr(0)
 }
 
 // ModelQuantizeDefaultParams returns default parameters for model quantization.

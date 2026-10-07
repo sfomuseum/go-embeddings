@@ -2,6 +2,7 @@ package llama
 
 import (
 	"errors"
+	"sync"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -124,6 +125,9 @@ var (
 
 	// LLAMA_API void llama_set_causal_attn(struct llama_context * ctx, bool causal_attn);
 	setCausalAttnFunc ffi.Fun
+
+	// LLAMA_API bool llama_get_causal_attn(const struct llama_context * ctx);
+	getCausalAttnFunc ffi.Fun
 
 	// LLAMA_API int32_t llama_set_adapter_cvec(
 	//         struct llama_context * ctx,
@@ -274,6 +278,10 @@ func loadContextFuncs(lib loader.Lib) error {
 		return loadError("llama_set_causal_attn", err)
 	}
 
+	if getCausalAttnFunc, err = lib.Prep("llama_get_causal_attn", &ffi.TypeUint8, &ffi.TypePointer); err != nil {
+		return loadError("llama_get_causal_attn", err)
+	}
+
 	if setAdapterCvecFunc, err = lib.Prep("llama_set_adapter_cvec", &ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypeUint64, &ffi.TypeSint32, &ffi.TypeSint32, &ffi.TypeSint32); err != nil {
 		return loadError("llama_set_adapter_cvec", err)
 	}
@@ -346,9 +354,14 @@ var (
 )
 
 // ContextDefaultParams returns the default params to initialize a model context.
+//
+// NThreadsBatch comes from [Threads]. NThreads is 0, so [InitFromModel] sets
+// it from the model with [ModelThreads].
 func ContextDefaultParams() ContextParams {
 	var p ContextParams
 	contextDefaultParamsFunc.Call(unsafe.Pointer(&p))
+	p.NThreads = 0
+	p.NThreadsBatch = Threads()
 	return p
 }
 
@@ -358,10 +371,14 @@ func Free(ctx Context) error {
 		return errInvalidContext
 	}
 	freeFunc.Call(nil, unsafe.Pointer(&ctx))
+	abortCallbacks.Delete(ctx)
 	return nil
 }
 
 // SetWarmup sets the model context warmup mode on or off.
+//
+// Deprecated: do warmup runs manually instead. It can cause extra graph
+// reallocations with MoE models, and llama.cpp will remove it.
 func SetWarmup(ctx Context, warmup bool) error {
 	if ctx == 0 {
 		return errInvalidContext
@@ -585,6 +602,17 @@ func SetCausalAttn(ctx Context, causalAttn bool) {
 	setCausalAttnFunc.Call(nil, unsafe.Pointer(&ctx), &causalAttn)
 }
 
+// GetCausalAttn reports whether the context uses causal attention.
+func GetCausalAttn(ctx Context) bool {
+	if ctx == 0 {
+		return false
+	}
+	var result ffi.Arg
+	getCausalAttnFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx))
+
+	return result.Bool()
+}
+
 // SetAdapterCvec sets a loaded control vector to a llama_context, or if data is nil, clears
 // the currently loaded vector.
 // nEmbd should be the size of a single layer's control, and data should point
@@ -708,10 +736,21 @@ type AbortFunc func() bool
 // The data parameter is passed to the callback function on each invocation.
 // Pass nil for fn to clear the abort callback.
 func SetAbortCallback(ctx Context, fn AbortFunc) {
-	callback := newAbortCallback(fn)
+	if ctx == 0 {
+		return
+	}
 
-	var nilPtr uintptr
-	setAbortCallbackFunc.Call(nil, unsafe.Pointer(&ctx), unsafe.Pointer(&callback), unsafe.Pointer(&nilPtr))
+	var callback uintptr
+	if fn == nil {
+		abortCallbacks.Delete(ctx)
+	} else {
+		abortCallbacks.Store(ctx, fn)
+		abortCallbackOnce.Do(newAbortCallback)
+		callback = abortCallback
+	}
+
+	// The context is the user data, so the shared callback can find fn.
+	setAbortCallbackFunc.Call(nil, unsafe.Pointer(&ctx), unsafe.Pointer(&callback), unsafe.Pointer(&ctx))
 }
 
 // SetSampler attaches a sampler to the context for the given sequence ID,
@@ -797,10 +836,18 @@ func NCtxSeq(ctx Context) uint32 {
 	return uint32(result)
 }
 
-// newAbortCallback creates a C-compatible callback from a Go AbortFunc.
-func newAbortCallback(fn AbortFunc) uintptr {
-	return purego.NewCallback(func(data uintptr) uintptr {
-		if fn() {
+var (
+	abortCallback     uintptr
+	abortCallbackOnce sync.Once
+	abortCallbacks    sync.Map // Context to AbortFunc
+)
+
+// newAbortCallback creates the one C callback that every context shares,
+// since purego callback slots are never released.
+func newAbortCallback() {
+	abortCallback = purego.NewCallback(func(data uintptr) uintptr {
+		v, ok := abortCallbacks.Load(Context(data))
+		if ok && v.(AbortFunc)() {
 			return 1
 		}
 		return 0

@@ -49,6 +49,9 @@ var (
 	// LLAMA_API const char * llama_print_system_info(void);
 	printSystemInfoFunc ffi.Fun
 
+	// LLAMA_API const char * llama_version(void);
+	versionFunc ffi.Fun
+
 	// LLAMA_API const char * llama_load_mode_name(enum llama_load_mode load_mode);
 	loadModeNameFunc ffi.Fun
 
@@ -112,6 +115,10 @@ func loadBackendFuncs(lib loader.Lib) error {
 
 	if printSystemInfoFunc, err = lib.Prep("llama_print_system_info", &ffi.TypePointer); err != nil {
 		return loadError("llama_print_system_info", err)
+	}
+
+	if versionFunc, err = lib.Prep("llama_version", &ffi.TypePointer); err != nil {
+		return loadError("llama_version", err)
 	}
 
 	if loadModeNameFunc, err = lib.Prep("llama_load_mode_name", &ffi.TypePointer, &ffi.TypeSint32); err != nil {
@@ -209,7 +216,15 @@ func LoadModeName(loadMode LoadMode) string {
 }
 
 // LoadModeFromStr returns the load mode for a given string.
+// It returns LoadModeAuto for an unknown string.
 func LoadModeFromStr(str string) LoadMode {
+	// llama.cpp throws on an unknown string, so only known names reach it.
+	switch str {
+	case "auto", "none", "mmap", "mlock", "mmap+mlock", "dio":
+	default:
+		return LoadModeAuto
+	}
+
 	// libffi always stores a full 8-byte ffi_arg for an integer return, so
 	// the return buffer must be ffi.Arg-wide, not LoadMode-wide (int32).
 	var result ffi.Arg
@@ -246,6 +261,18 @@ func FtypeName(ftype Ftype) string {
 func PrintSystemInfo() string {
 	var result *byte
 	printSystemInfoFunc.Call(unsafe.Pointer(&result))
+
+	if result == nil {
+		return ""
+	}
+
+	return utils.BytePtrToString(result)
+}
+
+// Version returns the version of the loaded llama.cpp library.
+func Version() string {
+	var result *byte
+	versionFunc.Call(unsafe.Pointer(&result))
 
 	if result == nil {
 		return ""

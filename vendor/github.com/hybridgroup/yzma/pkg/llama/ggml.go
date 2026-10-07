@@ -3,6 +3,8 @@ package llama
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"unsafe"
 
 	"github.com/hybridgroup/yzma/pkg/loader"
@@ -228,10 +230,42 @@ func GGMLBackendLoadAllFromPath(path string) error {
 		return errors.New("invalid path")
 	}
 
+	release := loader.PreloadBackends(path)
+	defer release()
+
 	p := &[]byte(path + "\x00")[0]
 	ggmlBackendLoadAllFromPath.Call(nil, unsafe.Pointer(&p))
 
 	return nil
+}
+
+// GGMLBackendLoadErrors opens each ggml backend library in path and returns the
+// errors for the ones that fail to open. ggml does not report these errors itself.
+func GGMLBackendLoadErrors(path string) []error {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return []error{err}
+	}
+
+	pattern := filepath.Base(loader.GetLibraryFilename("", "ggml-*"))
+	base := filepath.Base(loader.GetLibraryFilename("", "ggml-base"))
+
+	var errs []error
+	for _, e := range entries {
+		name := e.Name()
+		if match, _ := filepath.Match(pattern, name); !match || name == base {
+			continue
+		}
+
+		lib, err := loader.Open(filepath.Join(path, name))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+			continue
+		}
+		lib.Close()
+	}
+
+	return errs
 }
 
 // GGMLBackendUnload unloads a backend if loaded dynamically and unregisters it.
@@ -259,8 +293,11 @@ func GGMLBackendDeviceGet(index uint64) GGMLBackendDevice {
 
 // GGMLBackendDeviceByName returns the backend device by its name.
 func GGMLBackendDeviceByName(name string) GGMLBackendDevice {
-	namePtr, _ := utils.BytePtrFromString(name)
 	var ret GGMLBackendDevice
+	namePtr, err := utils.BytePtrFromString(name)
+	if err != nil {
+		return ret
+	}
 	ggmlBackendDevByNameFunc.Call(unsafe.Pointer(&ret), unsafe.Pointer(&namePtr))
 	return ret
 }
@@ -288,8 +325,11 @@ func GGMLBackendRegGet(index uint64) GGMLBackendReg {
 
 // GGMLBackendRegByName returns the backend registration by its name.
 func GGMLBackendRegByName(name string) GGMLBackendReg {
-	namePtr, _ := utils.BytePtrFromString(name)
 	var ret GGMLBackendReg
+	namePtr, err := utils.BytePtrFromString(name)
+	if err != nil {
+		return ret
+	}
 	ggmlBackendRegByNameFunc.Call(unsafe.Pointer(&ret), unsafe.Pointer(&namePtr))
 	return ret
 }

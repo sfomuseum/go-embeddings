@@ -21,10 +21,10 @@ const (
 
 	// Session constants
 	SessionMagic   = FileMagicGGSN
-	SessionVersion = 10
+	SessionVersion = 11
 
 	StateSeqMagic   = FileMagicGGSQ
-	StateSeqVersion = 3
+	StateSeqVersion = 4
 
 	// maximum token value
 	MaxToken = 0x7fffffff
@@ -168,9 +168,10 @@ const (
 type SplitMode int32
 
 const (
-	SplitModeNone  SplitMode = 0 // single GPU
-	SplitModeLayer SplitMode = 1 // split layers and KV across GPUs
-	SplitModeRow   SplitMode = 2 // split layers and KV across GPUs, use tensor parallelism if supported
+	SplitModeNone   SplitMode = 0 // single GPU
+	SplitModeLayer  SplitMode = 1 // split layers and KV across GPUs
+	SplitModeRow    SplitMode = 2 // split layers and KV across GPUs, use tensor parallelism if supported
+	SplitModeTensor SplitMode = 3
 )
 
 type LoadMode int32
