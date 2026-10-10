@@ -371,6 +371,8 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 	model_fname := filepath.Base(req.Model)
 	model_path := filepath.Join(e.model_root, model_fname)
 
+	slog.Debug("Get model", "path", model_path)
+	
 	_, err := os.Stat(model_path)
 
 	if err != nil {
@@ -412,6 +414,8 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 
 	params := llama.ModelDefaultParams()
 
+	slog.Debug("Load model from path", "path", model_path)
+	
 	model, err := llama.ModelLoadFromFile(model_path, params)
 
 	if err != nil {
