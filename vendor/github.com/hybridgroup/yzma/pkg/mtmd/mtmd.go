@@ -1,0 +1,603 @@
+package mtmd
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"runtime"
+	"sync"
+	"unsafe"
+
+	"github.com/hybridgroup/yzma/pkg/llama"
+	"github.com/hybridgroup/yzma/pkg/loader"
+	"github.com/hybridgroup/yzma/pkg/utils"
+	"github.com/jupiterrider/ffi"
+)
+
+// ProgressCallback is an optional callback for multimodal projector loading progress.
+// It is called with a progress value between 0.0 and 1.0.
+// Return false from the callback to abort model loading, or true to continue.
+type ProgressCallback func(progress float32, userData uintptr) bool
+
+//	struct mtmd_input_text {
+//	    const char * text;
+//		size_t text_len;
+//	    bool add_special;
+//	    bool parse_special;
+//	};
+type InputText struct {
+	Text         *byte
+	TextLen      uint64
+	AddSpecial   bool
+	ParseSpecial bool
+}
+
+//	struct mtmd_input_part {
+//	    // only text or bitmap can be set, not both
+//	    const struct mtmd_input_text * text;
+//	    const struct mtmd_bitmap * bitmap;
+//	};
+type InputPart struct {
+	Text   *InputText
+	Bitmap Bitmap
+}
+
+// Opaque types (represented as pointers)
+type Context uintptr
+type ImageTokens uintptr
+type InputChunk uintptr
+type InputChunks uintptr
+
+// Context parameters for the MTMD initialization.
+type ContextParamsType struct {
+	UseGPU bool
+	// specific backend device to use, or nil for automatic selection
+	Device             llama.GGMLBackendDevice
+	PrintTimings       bool
+	Threads            int32
+	ImageMarker        *byte
+	MediaMarker        *byte
+	FlashAttentionType llama.FlashAttentionType
+	// whether to run a warmup encode pass after initialization
+	Warmup         bool
+	ImageMinTokens int32
+	ImageMaxTokens int32
+	// callback function passed over to mtmd proper
+	CBEval         uintptr
+	CBEvalUserData uintptr
+	// batching params
+	BatchMaxTokens int32
+	// progress callback fired during model load (added in llama.cpp b9750)
+	ProgressCallback         uintptr // mtmd_progress_callback
+	ProgressCallbackUserData uintptr // void *
+}
+
+var (
+	ffiTypeSize = ffi.TypeUint64
+
+	// ffiTypeContextParams represents the C struct mtmd_context_params.
+	ffiTypeContextParams = ffi.NewType(
+		&ffi.TypeUint8,   // use_gpu bool
+		&ffi.TypePointer, // device ggml_backend_dev_t
+		&ffi.TypeUint8,   // print_timings bool
+		&ffi.TypeSint32,  // n_threads int
+		&ffi.TypePointer, // image_marker *char
+		&ffi.TypePointer, // media_marker *char
+		&ffi.TypeSint32,  // flash_attn_type enum llama_flash_attn_type (int-sized)
+		&ffi.TypeUint8,   // warmup bool
+		&ffi.TypeSint32,  // image_min_tokens int
+		&ffi.TypeSint32,  // image_max_tokens int
+		&ffi.TypePointer, // cb_eval callback
+		&ffi.TypePointer, // cb_eval_user_data void*
+		&ffi.TypeSint32,  // batch_max_tokens int
+		&ffi.TypePointer, // progress_callback (added in llama.cpp b9750)
+		&ffi.TypePointer, // progress_callback_user_data (added in llama.cpp b9750)
+	)
+
+	// ffiTypeInputText represents the C struct mtmd_input_text
+	ffiTypeInputText = ffi.NewType(&ffi.TypePointer, &ffiTypeSize, &ffi.TypeUint8, &ffi.TypeUint8)
+)
+
+var (
+	// MTMD_API const char * mtmd_default_marker(void);
+	defaultMarkerFunc ffi.Fun
+
+	// MTMD_API struct mtmd_context_params mtmd_context_params_default(void);
+	contextParamsDefaultFunc ffi.Fun
+
+	// MTMD_API mtmd_context * mtmd_init_from_file(const char * mmproj_fname,
+	//                                         const struct llama_model * text_model,
+	//                                         const struct mtmd_context_params ctx_params);
+	initFromFileFunc ffi.Fun
+
+	// MTMD_API void mtmd_free(mtmd_context * ctx);
+	freeFunc ffi.Fun
+
+	// MTMD_API bool mtmd_support_vision(mtmd_context * ctx);
+	supportVisionFunc ffi.Fun
+
+	// MTMD_API int32_t mtmd_tokenize(mtmd_context * ctx,
+	//                            mtmd_input_chunks * output,
+	//                            const mtmd_input_text * text,
+	//                            const mtmd_bitmap ** bitmaps,
+	//                            size_t n_bitmaps);
+	tokenizeFunc ffi.Fun
+
+	// MTMD_API int32_t mtmd_tokenize_from_parts(mtmd_context * ctx,
+	//                                           mtmd_input_chunks * output,
+	//                                           const mtmd_input_part ** parts,
+	//                                           size_t n_parts,
+	//                                           bool add_special);
+	tokenizeFromPartsFunc ffi.Fun
+
+	// MTMD_API int32_t mtmd_helper_eval_chunks(mtmd_context * ctx,
+	//                                          struct llama_context * lctx,
+	//                                          const mtmd_input_chunks * chunks,
+	//                                          llama_pos n_past,
+	//                                          llama_seq_id seq_id,
+	//                                          int32_t n_batch,
+	//                                          bool logits_last,
+	//                                          llama_pos * new_n_past);
+	helperEvalChunksFunc ffi.Fun
+
+	// MTMD_API int32_t mtmd_encode_chunk(mtmd_context * ctx,
+	//                               const mtmd_input_chunk * chunk);
+	encodeChunkFunc ffi.Fun
+
+	// MTMD_API int32_t mtmd_encode(mtmd_context * ctx,
+	//                              const mtmd_image_tokens * image_tokens);
+	encodeFunc ffi.Fun
+
+	// get output embeddings from the last encode pass
+	// the reading size (in bytes) is equal to:
+	// llama_model_n_embd_inp(model) * mtmd_input_chunk_get_n_tokens(chunk) * sizeof(float)
+	// MTMD_API float * mtmd_get_output_embd(mtmd_context * ctx);
+	getOutputEmbdFunc ffi.Fun
+
+	// MTMD_API bool mtmd_decode_use_non_causal(mtmd_context * ctx);
+	decodeUseNonCausalFunc ffi.Fun
+
+	// MTMD_API bool mtmd_decode_use_mrope(mtmd_context * ctx);
+	decodeUseMRopeFunc ffi.Fun
+
+	// MTMD_API bool mtmd_support_audio(mtmd_context * ctx);
+	supportAudioFunc ffi.Fun
+
+	// get audio sample rate in Hz, for example 16000 for Whisper.
+	// return -1 if audio is not supported
+	// MTMD_API int mtmd_get_audio_sample_rate(mtmd_context * ctx);
+	getAudioSampleRateFunc ffi.Fun
+
+	// Set callback for all future logging events.
+	// If this is not called, or NULL is supplied, everything is output on stderr.
+	// MTMD_API void mtmd_helper_log_set(ggml_log_callback log_callback, void * user_data);
+	mtmdLogSetFunc ffi.Fun
+
+	// MTMD_API const char * mtmd_get_marker(const mtmd_context * ctx);
+	getMarkerFunc ffi.Fun
+)
+
+func loadFuncs(lib loader.Lib) error {
+	var err error
+
+	if defaultMarkerFunc, err = lib.Prep("mtmd_default_marker", &ffi.TypePointer); err != nil {
+		return loadError("mtmd_default_marker", err)
+	}
+
+	if contextParamsDefaultFunc, err = lib.Prep("mtmd_context_params_default", &ffiTypeContextParams); err != nil {
+		return loadError("mtmd_context_params_default", err)
+	}
+
+	if initFromFileFunc, err = lib.Prep("mtmd_init_from_file", &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeContextParams); err != nil {
+		return loadError("mtmd_init_from_file", err)
+	}
+
+	if freeFunc, err = lib.Prep("mtmd_free", &ffi.TypeVoid, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_free", err)
+	}
+
+	if supportVisionFunc, err = lib.Prep("mtmd_support_vision", &ffi.TypeUint8, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_support_vision", err)
+	}
+
+	if tokenizeFunc, err = lib.Prep("mtmd_tokenize", &ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSize); err != nil {
+		return loadError("mtmd_tokenize", err)
+	}
+
+	if tokenizeFromPartsFunc, err = lib.Prep("mtmd_tokenize_from_parts", &ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSize, &ffi.TypeUint8); err != nil {
+		return loadError("mtmd_tokenize_from_parts", err)
+	}
+
+	if helperEvalChunksFunc, err = lib.Prep("mtmd_helper_eval_chunks", &ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer,
+		&ffi.TypeSint32, &ffi.TypeSint32, &ffi.TypeSint32, &ffi.TypeUint8, &ffi.TypePointer); err != nil {
+
+		return loadError("mtmd_helper_eval_chunks", err)
+	}
+
+	if encodeChunkFunc, err = lib.Prep("mtmd_encode_chunk", &ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_encode_chunk", err)
+	}
+
+	if encodeFunc, err = lib.Prep("mtmd_encode", &ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_encode", err)
+	}
+
+	if getOutputEmbdFunc, err = lib.Prep("mtmd_get_output_embd", &ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_get_output_embd", err)
+	}
+
+	if decodeUseNonCausalFunc, err = lib.Prep("mtmd_decode_use_non_causal", &ffi.TypeUint8, &ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_decode_use_non_causal", err)
+	}
+
+	if decodeUseMRopeFunc, err = lib.Prep("mtmd_decode_use_mrope", &ffi.TypeUint8, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_decode_use_mrope", err)
+	}
+
+	if supportAudioFunc, err = lib.Prep("mtmd_support_audio", &ffi.TypeUint8, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_support_audio", err)
+	}
+
+	if getAudioSampleRateFunc, err = lib.Prep("mtmd_get_audio_sample_rate", &ffi.TypeSint32, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_get_audio_sample_rate", err)
+	}
+
+	if mtmdLogSetFunc, err = lib.Prep("mtmd_helper_log_set", &ffi.TypeVoid, &ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_helper_log_set", err)
+	}
+
+	if getMarkerFunc, err = lib.Prep("mtmd_get_marker", &ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("mtmd_get_marker", err)
+	}
+
+	return nil
+}
+
+// DefaultMarker returns the default media marker used in prompts.
+func DefaultMarker() string {
+	var marker *byte
+	defaultMarkerFunc.Call(unsafe.Pointer(&marker))
+	return utils.BytePtrToString(marker)
+}
+
+// ContextParamsDefault returns the default context parameters for mtmd.
+//
+// Threads comes from [llama.Threads]. The llama.cpp default of four threads is
+// slow on a machine with many cores.
+func ContextParamsDefault() ContextParamsType {
+	var ctx ContextParamsType
+	contextParamsDefaultFunc.Call(unsafe.Pointer(&ctx))
+	ctx.Threads = llama.Threads()
+	return ctx
+}
+
+var (
+	progressCallbackCif  *ffi.Cif
+	progressCallbackFn   uintptr
+	progressCallbackOnce sync.Once
+	progressCallbacks    sync.Map // closure address to ProgressCallback
+	progressClosures     sync.Map // code address to *ffi.Closure
+	sizeOfClosure        = unsafe.Sizeof(ffi.Closure{})
+)
+
+// initProgressCallback creates the one Go callback that every progress closure
+// shares, since purego callback slots are never released.
+func initProgressCallback() {
+	progressCallbackFn = ffi.NewCallback(func(cif *ffi.Cif, ret unsafe.Pointer, args *unsafe.Pointer, userData unsafe.Pointer) uintptr {
+		if args == nil || ret == nil {
+			return 1 // error
+		}
+
+		v, ok := progressCallbacks.Load(uintptr(userData))
+		if !ok {
+			*(*uint8)(ret) = 1
+			return 0
+		}
+
+		arg := unsafe.Slice(args, cif.NArgs)
+		progress := *(*float32)(arg[0])
+		userDataPtr := *(*uintptr)(arg[1])
+		if v.(ProgressCallback)(progress, userDataPtr) {
+			*(*uint8)(ret) = 1
+		} else {
+			*(*uint8)(ret) = 0
+		}
+		return 0
+	})
+
+	progressCallbackCif = new(ffi.Cif)
+	if status := ffi.PrepCif(progressCallbackCif, ffi.DefaultAbi, 2, &ffi.TypeUint8, &ffi.TypeFloat, &ffi.TypePointer); status != ffi.OK {
+		panic(status)
+	}
+}
+
+// freeProgressCallback frees a closure made by SetProgressCallback. Any other code address is left alone.
+func freeProgressCallback(code uintptr) {
+	v, ok := progressClosures.LoadAndDelete(code)
+	if !ok {
+		return
+	}
+	closure := v.(*ffi.Closure)
+	progressCallbacks.Delete(uintptr(unsafe.Pointer(closure)))
+	ffi.ClosureFree(closure)
+}
+
+// SetProgressCallback sets a callback that fires during mmproj model loading.
+// The callback receives a progress value in [0.0, 1.0]. Return false to cancel loading.
+// Pass nil to clear a previously set callback. It frees the closure set before,
+// so do not load with a copy of p made before this call.
+func (p *ContextParamsType) SetProgressCallback(cb ProgressCallback) {
+	freeProgressCallback(p.ProgressCallback)
+	if cb == nil {
+		p.ProgressCallback = uintptr(0)
+		return
+	}
+
+	progressCallbackOnce.Do(initProgressCallback)
+
+	var progressCallbackCode unsafe.Pointer
+	closure := ffi.ClosureAlloc(sizeOfClosure, &progressCallbackCode)
+	if closure == nil {
+		p.ProgressCallback = uintptr(0)
+		return
+	}
+
+	progressCallbacks.Store(uintptr(unsafe.Pointer(closure)), cb)
+	progressClosures.Store(uintptr(progressCallbackCode), closure)
+	if status := ffi.PrepClosureLoc(closure, progressCallbackCif, progressCallbackFn, unsafe.Pointer(closure), progressCallbackCode); status != ffi.OK {
+		panic(status)
+	}
+
+	p.ProgressCallback = uintptr(progressCallbackCode)
+}
+
+// InitFromFile initializes the mtmd context. mmprojFname is a projector file. model is a model that has already been opened.
+// ctxParams are the ContextParamsType for the new Context.
+func InitFromFile(mmprojFname string, model llama.Model, ctxParams ContextParamsType) (Context, error) {
+	var ctx Context
+	if _, err := os.Stat(mmprojFname); err != nil {
+		// no such file?
+		return ctx, err
+	}
+
+	file := &[]byte(mmprojFname + "\x00")[0]
+	initFromFileFunc.Call(unsafe.Pointer(&ctx), unsafe.Pointer(&file), unsafe.Pointer(&model), unsafe.Pointer(&ctxParams))
+
+	if ctx == 0 {
+		return ctx, errors.New("failed to initialize mtmd context")
+	}
+	return ctx, nil
+}
+
+// Free frees a Context that has already been created using InitFromFile.
+func Free(ctx Context) error {
+	if ctx == 0 {
+		return errors.New("invalid mtmd context handle")
+	}
+	freeFunc.Call(nil, unsafe.Pointer(&ctx))
+	evalChunksLocks.Delete(ctx)
+	return nil
+}
+
+// SupportVision returns whether the current model supports vision input.
+func SupportVision(ctx Context) bool {
+	if ctx == 0 {
+		return false
+	}
+	var result ffi.Arg
+	supportVisionFunc.Call(&result, unsafe.Pointer(&ctx))
+
+	return result.Bool()
+}
+
+// Tokenize an input text prompt and a list of bitmaps (images/audio)
+// the prompt must have the input image marker (default: "<__media__>") in it
+// the default marker is defined by mtmd_default_marker()
+// the marker will be replaced with the image/audio chunk
+// for example:
+//
+//	"here is an image: <__media__>\ndescribe it in detail."
+//	this gives 3 chunks:
+//	1. "here is an image: <start_of_image>"
+//	2. (image/audio tokens)
+//	3. "<end_of_image>\ndescribe it in detail."
+//
+// number of bitmaps must be equal to the number of markers in the prompt
+// this function is thread-safe (shared ctx)
+// return values:
+//
+//	0 on success
+//	1 on number of bitmaps not matching the number of markers
+//	2 on image preprocessing error
+func Tokenize(ctx Context, out InputChunks, text *InputText, bitmaps []Bitmap) int32 {
+	if ctx == 0 {
+		return 1
+	}
+	bt := unsafe.SliceData(bitmaps)
+	nBitmaps := uint64(len(bitmaps))
+
+	var result ffi.Arg
+	tokenizeFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx), unsafe.Pointer(&out), unsafe.Pointer(&text), unsafe.Pointer(&bt), &nBitmaps)
+
+	return int32(result)
+}
+
+// NewInputText create a new InputText to be used for calling Tokenize.
+func NewInputText(text string, addSpecial, parseSpecial bool) *InputText {
+	text += "\x00"
+	p := unsafe.StringData(text)
+	return &InputText{
+		Text:         p,
+		TextLen:      uint64(len(text) - 1), // exclude null terminator
+		AddSpecial:   addSpecial,
+		ParseSpecial: parseSpecial,
+	}
+}
+
+// NewInputTextPart creates an InputPart that holds text.
+func NewInputTextPart(text *InputText) *InputPart {
+	return &InputPart{Text: text}
+}
+
+// NewInputBitmapPart creates an InputPart that holds a bitmap.
+func NewInputBitmapPart(bitmap Bitmap) *InputPart {
+	return &InputPart{Bitmap: bitmap}
+}
+
+// TokenizeFromParts does the same as Tokenize, but it takes an ordered list of parts.
+// Each part must have either text or a bitmap, not both and not neither.
+// Use it when the prompt must not use media markers, or when each text part needs
+// its own ParseSpecial value. The AddSpecial value of each part is ignored, the
+// addSpecial parameter applies to all of the parts.
+// return values:
+//
+//	0 on success
+//	1 if a part has both text and bitmap set, or neither
+//	2 on media preprocessing error
+func TokenizeFromParts(ctx Context, out InputChunks, parts []*InputPart, addSpecial bool) int32 {
+	if ctx == 0 {
+		return 1
+	}
+	pt := unsafe.SliceData(parts)
+	nParts := uint64(len(parts))
+
+	var result ffi.Arg
+	tokenizeFromPartsFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx), unsafe.Pointer(&out), unsafe.Pointer(&pt), &nParts, &addSpecial)
+	runtime.KeepAlive(parts)
+
+	return int32(result)
+}
+
+// HelperEvalChunks is a helper function that automatically:
+// 1. run llama.Decode() on text chunks
+// 2. run mtmd.Encode() on image chunks, then mtmd.GetOutputEmbd() and then llama.Decode()
+// if any of the mtmd.Encode() or llama.Decode() calls return non-zero, stop and forward the error
+// otherwise, returns 0 on success
+// Calls on the same Context are serialised. Calls on different Contexts run in parallel.
+func HelperEvalChunks(ctx Context, lctx llama.Context, chunks InputChunks, nPast llama.Pos, seqID llama.SeqId, nBatch int32, logitsLast bool, newNPast *llama.Pos) int32 {
+	if ctx == 0 {
+		return -1
+	}
+	mu, _ := evalChunksLocks.LoadOrStore(ctx, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
+
+	var result ffi.Arg
+	helperEvalChunksFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx), unsafe.Pointer(&lctx), unsafe.Pointer(&chunks), &nPast, &seqID,
+		&nBatch, &logitsLast, unsafe.Pointer(&newNPast))
+
+	return int32(result)
+}
+
+// EncodeChunk encodes a single input chunk (image/audio).
+// This function is NOT thread-safe.
+func EncodeChunk(ctx Context, chunk InputChunk) error {
+	if ctx == 0 {
+		return errors.New("invalid mtmd context handle")
+	}
+
+	var result ffi.Arg
+	encodeChunkFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx), unsafe.Pointer(&chunk))
+	if int32(result) != 0 {
+		return fmt.Errorf("mtmd_encode_chunk failed: %d", result)
+	}
+
+	return nil
+}
+
+// Encode encodes image tokens.
+// This function is NOT thread-safe.
+//
+// Deprecated: use [EncodeChunk] instead.
+func Encode(ctx Context, imageTokens ImageTokens) error {
+	if ctx == 0 {
+		return errors.New("invalid mtmd context handle")
+	}
+
+	var result ffi.Arg
+	encodeFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx), unsafe.Pointer(&imageTokens))
+	if int32(result) != 0 {
+		return fmt.Errorf("mtmd_encode failed: %d", result)
+	}
+
+	return nil
+}
+
+// GetOutputEmbd returns the output embedding from the last encode pass.
+// You must pass in the embedSize for the slice to be returned, which is equal to:
+// llama.ModelNEmbdInp(model) * int32(InputChunkGetNTokens(chunk))
+func GetOutputEmbd(ctx Context, embedSize int32) ([]float32, error) {
+	if ctx == 0 {
+		return nil, errors.New("invalid mtmd context handle")
+	}
+
+	var embdPtr unsafe.Pointer
+	getOutputEmbdFunc.Call(unsafe.Pointer(&embdPtr), unsafe.Pointer(&ctx))
+	if embdPtr == nil {
+		return nil, errors.New("mtmd_get_output_embd returned null pointer")
+	}
+
+	embdSlice := unsafe.Slice((*float32)(embdPtr), embedSize)
+	return embdSlice, nil
+}
+
+// DecodeUseNonCausal checks if the non-causal mask needs to be set before llama_decode.
+// If chunk is 0 (nil), it assumes the default case where chunk is an image chunk.
+func DecodeUseNonCausal(ctx Context, chunk InputChunk) bool {
+	if ctx == 0 {
+		return false
+	}
+	var result ffi.Arg
+	decodeUseNonCausalFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx), unsafe.Pointer(&chunk))
+	return result.Bool()
+}
+
+// DecodeUseMRope checks if the current model uses M-RoPE for llama_decode.
+func DecodeUseMRope(ctx Context) bool {
+	if ctx == 0 {
+		return false
+	}
+	var result ffi.Arg
+	decodeUseMRopeFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx))
+	return result.Bool()
+}
+
+// SupportAudio checks if the current model supports audio input.
+func SupportAudio(ctx Context) bool {
+	if ctx == 0 {
+		return false
+	}
+	var result ffi.Arg
+	supportAudioFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx))
+	return result.Bool()
+}
+
+// GetAudioSampleRate returns the audio sample rate in Hz, or -1 if audio is not supported.
+func GetAudioSampleRate(ctx Context) int {
+	if ctx == 0 {
+		return -1
+	}
+	var result ffi.Arg
+	getAudioSampleRateFunc.Call(unsafe.Pointer(&result), unsafe.Pointer(&ctx))
+	return int(result)
+}
+
+// LogSet sets the logging mode. Pass [llama.LogSilent()] to turn logging off. Pass nil to use stdout.
+func LogSet(cb uintptr) {
+	nada := uintptr(0)
+	mtmdLogSetFunc.Call(nil, unsafe.Pointer(&cb), unsafe.Pointer(&nada))
+}
+
+// GetMarker returns the media marker string used by the given context.
+// This is the per-context equivalent of DefaultMarker.
+func GetMarker(ctx Context) string {
+	if ctx == 0 {
+		return ""
+	}
+	var markerPtr *byte
+	getMarkerFunc.Call(unsafe.Pointer(&markerPtr), unsafe.Pointer(&ctx))
+	if markerPtr == nil {
+		return ""
+	}
+	return utils.BytePtrToString(markerPtr)
+}

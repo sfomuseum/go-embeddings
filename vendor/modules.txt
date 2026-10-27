@@ -338,6 +338,7 @@ github.com/hashicorp/go-version
 github.com/hybridgroup/yzma/pkg/download
 github.com/hybridgroup/yzma/pkg/llama
 github.com/hybridgroup/yzma/pkg/loader
+github.com/hybridgroup/yzma/pkg/mtmd
 github.com/hybridgroup/yzma/pkg/utils
 # github.com/jupiterrider/ffi v0.8.0
 ## explicit; go 1.18

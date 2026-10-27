@@ -15,6 +15,7 @@ import (
 
 	"github.com/hybridgroup/yzma/pkg/download"
 	"github.com/hybridgroup/yzma/pkg/llama"
+	"github.com/hybridgroup/yzma/pkg/mtmd"
 )
 
 // YzmaEmbedder implements the `Embedder` interface using the `hybridgroup/yzma` package to derive embeddings.
@@ -172,7 +173,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	llama.Init()
 
 	// We call llama.Close in Close() below
-	
+
 	context_sz := 0
 	batch_sz := 2048
 	pooling := "mean"
@@ -250,7 +251,7 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 	defer llama.ModelFree(model)
 
 	body := string(req.Body)
-	
+
 	model_ctx := llama.ContextDefaultParams()
 	model_ctx.NCtx = uint32(e.context_sz)
 	model_ctx.NBatch = uint32(e.batch_sz)
@@ -328,28 +329,173 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 	return rsp, nil
 }
 
-// ImageEmbeddings is not implemented for the yzma backend. It returns the `NotImplemented` error to
-// indicate that image embeddings are unsupported.
+// ImageEmbeddings derives embeddings for the image contained in the request.
+// It uses the correct yzma/mtmd pipeline variables and function signatures.
 func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
-	return nil, NotImplemented
-}
 
-// Close releases resources held by the yzma backend.  It also removes any temporary directories that were created for downloading the yzma binary.
-func (e *YzmaEmbedder[T]) Close() error {
+	err := mtmd.Load(e.lib_path)
 
-	llama.Close()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load mtmd library from %s, %w", e.lib_path, err)
+	}
 
-	if e.tmp_dir != "" {
+	// 2. Load underlying core model metadata
+	model, err := e.getModelForRequest(ctx, req)
 
-		slog.Debug("Remove tmp dir", "path", e.tmp_dir)
-		err := os.RemoveAll(e.tmp_dir)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to instantiate model, %w", err)
+	}
 
-		if err != nil {
-			slog.Error("Failed to remove tmp dir", "path", e.tmp_dir, "error", err)
+	defer llama.ModelFree(model)
+
+	// 3. Configure standard underlying context features
+	model_ctx := llama.ContextDefaultParams()
+	model_ctx.NCtx = uint32(e.context_sz)
+	model_ctx.NBatch = uint32(e.batch_sz)
+	model_ctx.PoolingType = e.pooling_type
+	model_ctx.Embeddings = 1
+
+	emb_ctx, err := llama.InitFromModel(model, model_ctx)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to initialize context from model, %w", err)
+	}
+	defer llama.Free(emb_ctx)
+
+	// 4. Resolve the location framework matching the projector binary
+
+	u, err := url.Parse(req.Model)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var mmproj_uri string
+
+	switch u.Scheme {
+	case "http", "https":
+
+		model_root := filepath.Dir(u.Path)
+		model_fname := filepath.Base(u.Path)
+		mmproj_fname := "mmproj-" + model_fname
+
+		u.Path = filepath.Join(model_root, mmproj_fname)
+		mmproj_uri = u.String()
+
+	case "file":
+
+		model_root := filepath.Dir(req.Model)
+		model_fname := filepath.Base(req.Model)
+		mmproj_fname := "mmproj-" + model_fname
+
+		mmproj_uri = filepath.Join(model_root, mmproj_fname)
+	default:
+		return nil, fmt.Errorf("Unsupported model scheme")
+	}
+
+	slog.Info("WUT", "model", req.Model, "mmproj", mmproj_uri)
+
+	mmproj_path, err := e.fetchModel(ctx, mmproj_uri)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Instantiate multimodal parsing layers
+
+	mctxParams := mtmd.ContextParamsDefault()
+
+	mtmdCtx, err := mtmd.InitFromFile(mmproj_path, model, mctxParams)
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize multimodal context, %w", err)
+	}
+
+	defer mtmd.Free(mtmdCtx)
+
+	// 6. Cache the request bytes down to a file descriptor for parsing
+	tmpImg, err := os.CreateTemp("", "yzma-img-*.jpg")
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create temporary image cache file, %w", err)
+	}
+	defer os.Remove(tmpImg.Name())
+	defer tmpImg.Close()
+
+	if _, err := tmpImg.Write(req.Body); err != nil {
+		return nil, fmt.Errorf("Failed to write image data to temporary file, %w", err)
+	}
+
+	// 7. Parse the file via Bitmap wrappers
+
+	bitmap := mtmd.BitmapInitFromFile(mtmdCtx, tmpImg.Name(), false, mtmd.InitOptDefault())
+
+	if bitmap.Bitmap == 0 {
+		return nil, fmt.Errorf("Failed to construct image layout matrix from file")
+	}
+
+	defer mtmd.BitmapFree(bitmap.Bitmap)
+
+	// 8. Allocate target output allocation tracking layout chunks
+	outputChks := mtmd.InputChunksInit()
+	defer mtmd.InputChunksFree(outputChks)
+
+	// 9. Prepare standard token marker structure mapping the image boundaries
+	textMarker := mtmd.DefaultMarker()
+	inputText := mtmd.NewInputText(textMarker, true, true)
+
+	// 10. Format and ingest the text/image markers into the target processing chunk
+	tokenizeRes := mtmd.Tokenize(mtmdCtx, outputChks, inputText, []mtmd.Bitmap{bitmap.Bitmap})
+	if tokenizeRes != 0 {
+		return nil, fmt.Errorf("Multimodal Tokenize operations returned error status: %d", tokenizeRes)
+	}
+
+	// 11. Run evaluation matrices using explicit sequence tracking arguments
+	var lastPos llama.Pos
+	evalRes := mtmd.HelperEvalChunks(mtmdCtx, emb_ctx, outputChks, 0, 0, int32(model_ctx.NBatch), true, &lastPos)
+	if evalRes != 0 {
+		return nil, fmt.Errorf("Multimodal image token layer evaluation failed with status, %d", evalRes)
+	}
+
+	// 12. Read vector mapping state layers out from your execution block
+	nEmbd := llama.ModelNEmbd(model)
+	vec, err := llama.GetEmbeddingsSeq(emb_ctx, 0, nEmbd)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to extract multimodal embeddings from context, %w", err)
+	}
+
+	// 13. Perform standard normalizing matrix reduction formulas
+	var sum float64
+	for _, v := range vec {
+		sum += float64(v * v)
+	}
+	if sum > 0 {
+		sum = math.Sqrt(sum)
+		norm := float32(1.0 / sum)
+		for i := range vec {
+			vec[i] = vec[i] * norm
 		}
 	}
 
-	return nil
+	// 14. Package elements to match required interface models
+	now := time.Now()
+	ts := now.Unix()
+	model_name := filepath.Base(req.Model)
+
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonModel:     model_name,
+		CommonCreated:   ts,
+		CommonPrecision: e.precision,
+	}
+
+	switch {
+	case strings.HasSuffix(e.precision, "64"):
+		rsp.CommonEmbeddings = toFloat64Slice[T](AsFloat64(vec))
+	default:
+		rsp.CommonEmbeddings = toFloat32Slice[T](vec)
+	}
+
+	return rsp, nil
 }
 
 // getModelForRequest ensures that the model referenced in the request exists
@@ -358,54 +504,18 @@ func (e *YzmaEmbedder[T]) Close() error {
 // using `llama.ModelLoadFromFile` and returns the handle.
 func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *EmbeddingsRequest) (llama.Model, error) {
 
-	model_fname := filepath.Base(req.Model)
-	model_path := filepath.Join(e.model_root, model_fname)
+	slog.Debug("Get model", "model", req.Model)
 
-	slog.Debug("Get model", "path", model_path)
-	
-	_, err := os.Stat(model_path)
+	model_path, err := e.fetchModel(ctx, req.Model)
 
 	if err != nil {
-
-		if !os.IsNotExist(err) {
-			return 0, err
-		}
-
-		u, err := url.Parse(req.Model)
-
-		if err != nil {
-			return 0, fmt.Errorf("Failed to parse model URI, %w", err)
-		}
-
-		switch u.Scheme {
-		case "http", "https":
-
-			// To do: Better progress indicator...
-
-			slog.Debug("Download model", "model", req.Model, "target", e.model_root)
-			err := download.GetModelWithContext(ctx, req.Model, e.model_root, nil)
-
-			if err != nil {
-				return 0, fmt.Errorf("Failed to retrieve model, %w", err)
-			}
-
-		case "file":
-			model_path = u.Path
-		default:
-			return 0, fmt.Errorf("Unsupported model scheme")
-		}
-
-		_, err = os.Stat(model_path)
-
-		if err != nil {
-			return 0, fmt.Errorf("Model path does not exist, %w", err)
-		}
+		return 0, err
 	}
 
 	params := llama.ModelDefaultParams()
 
 	slog.Debug("Load model from path", "path", model_path)
-	
+
 	model, err := llama.ModelLoadFromFile(model_path, params)
 
 	if err != nil {
@@ -417,4 +527,54 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 	}
 
 	return model, nil
+}
+
+func (e *YzmaEmbedder[T]) fetchModel(ctx context.Context, model_uri string) (string, error) {
+
+	model_fname := filepath.Base(model_uri)
+	model_path := filepath.Join(e.model_root, model_fname)
+
+	slog.Debug("Fetch model", "uri", model_uri, "path", model_path)
+
+	_, err := os.Stat(model_path)
+
+	if err != nil {
+
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+
+		u, err := url.Parse(model_uri)
+
+		if err != nil {
+			return "", fmt.Errorf("Failed to parse model URI, %w", err)
+		}
+
+		switch u.Scheme {
+		case "http", "https":
+
+			// To do: Better progress indicator...
+
+			slog.Debug("Download model", "model", model_uri, "target", e.model_root)
+			err := download.GetModelWithContext(ctx, model_uri, e.model_root, nil)
+
+			if err != nil {
+				return "", fmt.Errorf("Failed to retrieve model, %w", err)
+			}
+
+		case "file":
+			model_path = u.Path
+		default:
+			return "", fmt.Errorf("Unsupported model scheme")
+		}
+
+		_, err = os.Stat(model_path)
+
+		if err != nil {
+			return "", fmt.Errorf("Model path does not exist, %w", err)
+		}
+	}
+
+	slog.Debug("Got model", "path", model_path)
+	return model_path, nil
 }
