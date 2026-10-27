@@ -558,9 +558,8 @@ Where `{PATH_TO_YZMA}` is the path the yzma-specific llama.cpp build. If empty t
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
-
 | context-size | int | no | Maximum number of tokens in a llama context. If omitted, the default of 0 (use library default) is used. |
-| batch-size | int | no | Maximum number of tokens processed per batch. If omitted, the default of 0 (use library default) is used. |
+| batch-size | int | no | Maximum number of tokens processed per batch. If omitted, default is 2048. |
 | pooling | string | no  Pooling strategy used to aggregate token embeddings.  Accepted values are the same strings that the `llama.PoolingType` type understands (e.g. `"mean"`, `"sum"`).  The default is `"mean"`. |
 | processor | string | no | Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will automatically select an appropriate processor. |
 | version | string | no | The yzma release version to download.  The  default is "" which corresponding to the most recently tagged release of `hybridgroup/yzma`. |
