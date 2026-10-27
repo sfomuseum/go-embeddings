@@ -171,8 +171,10 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	llama.LogSet(llama.LogSilent())
 	llama.Init()
 
+	// We call llama.Close in Close() below
+	
 	context_sz := 0
-	batch_sz := 0
+	batch_sz := 2048
 	pooling := "mean"
 
 	if q.Has("context-size") {
@@ -248,22 +250,10 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 	defer llama.ModelFree(model)
 
 	body := string(req.Body)
-
-	body_sz := len(body)
-	batch_sz := e.batch_sz
-
-	if batch_sz < body_sz {
-		new_sz := int(float64(body_sz) / 3.0)
-
-		if new_sz > batch_sz {
-			batch_sz = new_sz
-			slog.Debug("Reassign batch size based on input", "old", e.batch_sz, "new", batch_sz)
-		}
-	}
-
+	
 	model_ctx := llama.ContextDefaultParams()
 	model_ctx.NCtx = uint32(e.context_sz)
-	model_ctx.NBatch = uint32(batch_sz)
+	model_ctx.NBatch = uint32(e.batch_sz)
 	model_ctx.PoolingType = e.pooling_type
 	model_ctx.Embeddings = 1
 
@@ -371,6 +361,8 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 	model_fname := filepath.Base(req.Model)
 	model_path := filepath.Join(e.model_root, model_fname)
 
+	slog.Debug("Get model", "path", model_path)
+	
 	_, err := os.Stat(model_path)
 
 	if err != nil {
@@ -412,6 +404,8 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 
 	params := llama.ModelDefaultParams()
 
+	slog.Debug("Load model from path", "path", model_path)
+	
 	model, err := llama.ModelLoadFromFile(model_path, params)
 
 	if err != nil {
