@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/aaronland/go-roster v1.0.0
-	github.com/hybridgroup/yzma v1.29.0
+	github.com/hybridgroup/yzma v1.30.0
 	github.com/sfomuseum/go-encoderfile v0.0.1
 	github.com/sfomuseum/go-flags v0.12.1
 	github.com/sfomuseum/go-mobileclip v0.1.3
