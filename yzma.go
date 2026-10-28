@@ -134,7 +134,95 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, fmt.Errorf("Failed to create model root, %w", err)
 	}
 
+	// Start by assuming that llama.cpp has already been installed
+	// Then work out whether it needs to be fetched or updated
+
+	llama_fetch := false
+	llama_version := ""
+
 	if !download.AlreadyInstalled(lib_path) {
+		llama_fetch = true
+	}
+
+	if !llama_fetch {
+
+		err = llama.Load(lib_path)
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
+		}
+
+		auto_update := false
+
+		if q.Has("llama-auto-update") {
+
+			v, err := strconv.ParseBool(q.Get("llama-auto-update"))
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to parse ?llama-auto-update parameter, %w", err)
+			}
+
+			auto_update = v
+		}
+
+		if auto_update {
+
+			current := llama.Version()
+
+			slog.Debug("Llama auto-update enabled, check versions", "current", current)
+
+			latest, err := download.LlamaLatestVersion()
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to derive lastest yzma llama version, %w", err)
+			}
+
+			tag, err := download.LlamaNightlyTag(latest)
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to derive nightly tag from version '%s', %w", latest, err)
+			}
+
+			tagged := download.IsTaggedRelease(tag)
+
+			slog.Debug("Llama auto-update context", "current", current, "latest", latest, "tag", tag, "tagged", tagged)
+
+			if tagged && current != latest {
+				llama_fetch = true
+				llama_version = current
+
+				slog.Debug("Auto-update newer llama version", "version", current)
+			}
+
+		}
+	}
+
+	if q.Has("llama-version") {
+
+		v := q.Get("llama-version")
+
+		slog.Info("WYF", "v", v)
+		err := download.VersionIsValid(v)
+
+		if err != nil {
+			return nil, fmt.Errorf("Invalid llama-version number, %w", err)
+		}
+
+		current := llama.Version()
+
+		v_nopr := strings.Replace(v, "v", "", 1)
+
+		if current != v_nopr {
+			llama_fetch = true
+			llama_version = v
+			slog.Debug("Fetch llama version from query parameter", "version", v, "current", current)
+		}
+	}
+
+	slog.Debug("Load llama", "fetch", llama_fetch, "version", llama_version)
+	panic("woo")
+
+	if llama_fetch {
 
 		// https://pkg.go.dev/github.com/hybridgroup/yzma@v1.25.0/pkg/download#Install
 
@@ -146,30 +234,20 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			proc = "metal"
 		}
 
-		// "A tagged release of yzma installs its own llama.cpp release by default, so yzma install
-		// without the -version flag gets the version in this table. Use -version latest to get the
-		// most recent nightly build instead. A build from the main branch always uses the most recent
-		// nightly build." - https://github.com/hybridgroup/yzma#required-versions-of-llamacpp
+		slog.Debug("Download llama", "arch", arch, "os", os, "proc", proc, "version", llama_version)
 
-		version := ""
-
-		if q.Has("version") {
-			version = q.Get("version")
-		}
-
-		slog.Debug("Download llama", "arch", arch, "os", os, "proc", proc, "version", version)
-
-		err := download.GetWithContext(ctx, arch, os, proc, version, lib_path, download.DefaultProgressTracker())
+		err := download.GetWithContext(ctx, arch, os, proc, llama_version, lib_path, download.DefaultProgressTracker())
 
 		if err != nil {
 			return nil, fmt.Errorf("Failed to download llama, %w", err)
 		}
-	}
 
-	err = llama.Load(lib_path)
+		err = llama.Load(lib_path)
 
-	if err != nil {
-		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
+		}
+
 	}
 
 	logger := slog.Default()
