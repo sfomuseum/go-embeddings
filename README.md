@@ -600,7 +600,7 @@ $> ./bin/embeddings \
 2026/09/04 16:11:58 DEBUG Remove tmp dir path=/var/folders/_k/h7ndzcyx3dq027gsrg1q45xm0000gn/T/yzma3627492138
 ```
 
-Image embeddings are also supported for multimodal models. For example:
+Image embeddings are also supported for multimodal models. For example, using the [embeddinggemma-2 model](https://huggingface.co/ggml-org/embeddinggemma-2-GGUF)::
 
 ```
 $> ./bin/embeddings \
