@@ -30,6 +30,8 @@ type YzmaEmbedder[T Float] struct {
 	scheme string
 	// context_sz is the maximum number of tokens in a llama context.
 	context_sz int
+	// ngpu_layers stores the GPU offload layer count
+	ngpu_layers int
 	// batch_sz is the maximum number of tokens processed per batch.
 	batch_sz int
 	// pooling_type is the `llama.PoolingType` corresponding to `pooling`.
@@ -69,6 +71,7 @@ func init() {
 //   - **batch-size**     – Maximum number of tokens processed per batch. If omitted, the default of 0 (use library default) is used.
 //   - **pooling**        – Pooling strategy used to aggregate token embeddings.  Accepted values are the same strings that the
 //     `llama.PoolingType` type understands (e.g. `"mean"`, `"sum"`).  The default is `"mean"`.
+//   - **ngl**            - GPU offload layer count. Default is -1.
 //   - **processor**      – Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will
 //     automatically select an appropriate processor.
 //   - **version**        – The yzma release version to download.  The  default is `"v0.3.0"`.  The value should be a full git tag (e.g.
@@ -169,13 +172,19 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
 
-	llama.LogSet(llama.LogSilent())
+	logger := slog.Default()
+
+	if !logger.Enabled(ctx, slog.LevelDebug) {
+		llama.LogSet(llama.LogSilent())
+	}
+
 	llama.Init()
 
 	// We call llama.Close in Close() below
 
 	context_sz := 0
 	batch_sz := 2048
+	ngpu_layers := -1
 	pooling := "mean"
 
 	if q.Has("context-size") {
@@ -198,6 +207,18 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		}
 
 		batch_sz = v
+	}
+
+	if q.Has("ngl") {
+
+		v, err := strconv.Atoi(q.Get("ngl"))
+
+		if err != nil {
+
+			return nil, fmt.Errorf("Invalid ?ngl parameter, %w", err)
+		}
+
+		ngpu_layers = v
 	}
 
 	if q.Has("pooling") {
@@ -226,6 +247,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		scheme:       u.Scheme,
 		context_sz:   context_sz,
 		batch_sz:     batch_sz,
+		ngpu_layers:  ngpu_layers,
 		pooling_type: pooling_type,
 		model_root:   model_root,
 		tmp_dir:      tmp_dir,
@@ -290,43 +312,7 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 		return nil, fmt.Errorf("Failed to derive embeddings, %w", err)
 	}
 
-	var sum float64
-
-	for _, v := range vec {
-		sum += float64(v * v)
-	}
-
-	sum = math.Sqrt(sum)
-	norm := float32(1.0 / sum)
-
-	e32 := make([]float32, len(vec))
-
-	for i, v := range vec {
-		e32[i] = v * norm
-	}
-
-	now := time.Now()
-	ts := now.Unix()
-
-	// To do: Try to capture source/publisher for the model URI
-
-	model_name := filepath.Base(req.Model)
-
-	rsp := &CommonEmbeddingsResponse[T]{
-		CommonId:        req.Id,
-		CommonModel:     model_name,
-		CommonCreated:   ts,
-		CommonPrecision: e.precision,
-	}
-
-	switch {
-	case strings.HasSuffix(e.precision, "64"):
-		rsp.CommonEmbeddings = toFloat64Slice[T](AsFloat64(e32))
-	default:
-		rsp.CommonEmbeddings = toFloat32Slice[T](e32)
-	}
-
-	return rsp, nil
+	return e.generateResponse(req, vec)
 }
 
 // ImageEmbeddings derives embeddings for the image contained in the request.
@@ -337,6 +323,12 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load mtmd library from %s, %w", e.lib_path, err)
+	}
+
+	logger := slog.Default()
+
+	if !logger.Enabled(ctx, slog.LevelDebug) {
+		mtmd.LogSet(llama.LogSilent())
 	}
 
 	model, err := e.getModelForRequest(ctx, req)
@@ -476,45 +468,7 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 		return nil, fmt.Errorf("Failed to extract multimodal embeddings from context, %w", err)
 	}
 
-	// 13. Perform standard normalizing matrix reduction formulas
-
-	var sum float64
-
-	for _, v := range vec {
-		sum += float64(v * v)
-	}
-
-	if sum > 0 {
-
-		sum = math.Sqrt(sum)
-		norm := float32(1.0 / sum)
-
-		for i := range vec {
-			vec[i] = vec[i] * norm
-		}
-	}
-
-	// 14. Package elements to match required interface models
-
-	now := time.Now()
-	ts := now.Unix()
-	model_name := filepath.Base(req.Model)
-
-	rsp := &CommonEmbeddingsResponse[T]{
-		CommonId:        req.Id,
-		CommonModel:     model_name,
-		CommonCreated:   ts,
-		CommonPrecision: e.precision,
-	}
-
-	switch {
-	case strings.HasSuffix(e.precision, "64"):
-		rsp.CommonEmbeddings = toFloat64Slice[T](AsFloat64(vec))
-	default:
-		rsp.CommonEmbeddings = toFloat32Slice[T](vec)
-	}
-
-	return rsp, nil
+	return e.generateResponse(req, vec)
 }
 
 // Close releases resources held by the yzma backend.  It also removes any temporary directories that were created for downloading the yzma binary.
@@ -550,6 +504,7 @@ func (e *YzmaEmbedder[T]) getModelForRequest(ctx context.Context, req *Embedding
 	}
 
 	params := llama.ModelDefaultParams()
+	params.NGpuLayers = int32(e.ngpu_layers)
 
 	slog.Debug("Load model from path", "path", model_path)
 
@@ -614,4 +569,45 @@ func (e *YzmaEmbedder[T]) fetchModel(ctx context.Context, model_uri string) (str
 
 	slog.Debug("Got model", "path", model_path)
 	return model_path, nil
+}
+
+// generateResponse handles L2 normalization, model path extraction, and response formatting
+// consistently for both text and image vectors.
+func (e *YzmaEmbedder[T]) generateResponse(req *EmbeddingsRequest, vec []float32) (EmbeddingsResponse[T], error) {
+
+	var sum float64
+
+	for _, v := range vec {
+		sum += float64(v * v)
+	}
+
+	if sum > 0 {
+		sum = math.Sqrt(sum)
+		norm := float32(1.0 / sum)
+
+		for i := range vec {
+			vec[i] = vec[i] * norm
+		}
+	}
+
+	now := time.Now()
+	ts := now.Unix()
+
+	model_name := filepath.Base(req.Model)
+
+	rsp := &CommonEmbeddingsResponse[T]{
+		CommonId:        req.Id,
+		CommonModel:     model_name,
+		CommonCreated:   ts,
+		CommonPrecision: e.precision,
+	}
+
+	switch {
+	case strings.HasSuffix(e.precision, "64"):
+		rsp.CommonEmbeddings = toFloat64Slice[T](AsFloat64(vec))
+	default:
+		rsp.CommonEmbeddings = toFloat32Slice[T](vec)
+	}
+
+	return rsp, nil
 }
