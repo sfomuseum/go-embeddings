@@ -339,7 +339,6 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 		return nil, fmt.Errorf("Failed to load mtmd library from %s, %w", e.lib_path, err)
 	}
 
-	// 2. Load underlying core model metadata
 	model, err := e.getModelForRequest(ctx, req)
 
 	if err != nil {
@@ -348,7 +347,6 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 
 	defer llama.ModelFree(model)
 
-	// 3. Configure standard underlying context features
 	model_ctx := llama.ContextDefaultParams()
 	model_ctx.NCtx = uint32(e.context_sz)
 	model_ctx.NBatch = uint32(e.batch_sz)
@@ -356,6 +354,7 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 	model_ctx.Embeddings = 1
 
 	emb_ctx, err := llama.InitFromModel(model, model_ctx)
+
 	if err != nil {
 		return nil, fmt.Errorf("Unable to initialize context from model, %w", err)
 	}
@@ -392,42 +391,46 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 		return nil, fmt.Errorf("Unsupported model scheme")
 	}
 
-	slog.Info("WUT", "model", req.Model, "mmproj", mmproj_uri)
-
 	mmproj_path, err := e.fetchModel(ctx, mmproj_uri)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to fetch multimodal model %s, %w", mmproj_uri, err)
 	}
 
 	// 5. Instantiate multimodal parsing layers
 
-	mctxParams := mtmd.ContextParamsDefault()
+	mtmd_params := mtmd.ContextParamsDefault()
 
-	mtmdCtx, err := mtmd.InitFromFile(mmproj_path, model, mctxParams)
+	mtmd_ctx, err := mtmd.InitFromFile(mmproj_path, model, mtmd_params)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize multimodal context, %w", err)
 	}
 
-	defer mtmd.Free(mtmdCtx)
+	defer mtmd.Free(mtmd_ctx)
 
-	// 6. Cache the request bytes down to a file descriptor for parsing
-	tmpImg, err := os.CreateTemp("", "yzma-img-*.jpg")
+	tmp_im, err := os.CreateTemp("", "yzma-img-*.jpg")
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create temporary image cache file, %w", err)
 	}
-	defer os.Remove(tmpImg.Name())
-	defer tmpImg.Close()
 
-	if _, err := tmpImg.Write(req.Body); err != nil {
+	defer os.Remove(tmp_im.Name())
+	defer tmp_im.Close()
+
+	_, err = tmp_im.Write(req.Body)
+
+	if err != nil {
 		return nil, fmt.Errorf("Failed to write image data to temporary file, %w", err)
 	}
 
-	// 7. Parse the file via Bitmap wrappers
+	err = tmp_im.Close()
 
-	bitmap := mtmd.BitmapInitFromFile(mtmdCtx, tmpImg.Name(), false, mtmd.InitOptDefault())
+	if err != nil {
+		return nil, fmt.Errorf("Failed to close temporary file after writing, %w", err)
+	}
+
+	bitmap := mtmd.BitmapInitFromFile(mtmd_ctx, tmp_im.Name(), false, mtmd.InitOptDefault())
 
 	if bitmap.Bitmap == 0 {
 		return nil, fmt.Errorf("Failed to construct image layout matrix from file")
@@ -436,47 +439,63 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 	defer mtmd.BitmapFree(bitmap.Bitmap)
 
 	// 8. Allocate target output allocation tracking layout chunks
-	outputChks := mtmd.InputChunksInit()
-	defer mtmd.InputChunksFree(outputChks)
+
+	output_chunks := mtmd.InputChunksInit()
+	defer mtmd.InputChunksFree(output_chunks)
 
 	// 9. Prepare standard token marker structure mapping the image boundaries
-	textMarker := mtmd.DefaultMarker()
-	inputText := mtmd.NewInputText(textMarker, true, true)
+
+	text_marker := mtmd.DefaultMarker()
+	input_text := mtmd.NewInputText(text_marker, true, true)
 
 	// 10. Format and ingest the text/image markers into the target processing chunk
-	tokenizeRes := mtmd.Tokenize(mtmdCtx, outputChks, inputText, []mtmd.Bitmap{bitmap.Bitmap})
-	if tokenizeRes != 0 {
-		return nil, fmt.Errorf("Multimodal Tokenize operations returned error status: %d", tokenizeRes)
+
+	tokenize_rsp := mtmd.Tokenize(mtmd_ctx, output_chunks, input_text, []mtmd.Bitmap{bitmap.Bitmap})
+
+	if tokenize_rsp != 0 {
+		return nil, fmt.Errorf("Multimodal Tokenize operations returned error status: %d", tokenize_rsp)
 	}
 
 	// 11. Run evaluation matrices using explicit sequence tracking arguments
-	var lastPos llama.Pos
-	evalRes := mtmd.HelperEvalChunks(mtmdCtx, emb_ctx, outputChks, 0, 0, int32(model_ctx.NBatch), true, &lastPos)
-	if evalRes != 0 {
-		return nil, fmt.Errorf("Multimodal image token layer evaluation failed with status, %d", evalRes)
+
+	var last_pos llama.Pos
+
+	eval_rsp := mtmd.HelperEvalChunks(mtmd_ctx, emb_ctx, output_chunks, 0, 0, int32(model_ctx.NBatch), true, &last_pos)
+
+	if eval_rsp != 0 {
+		return nil, fmt.Errorf("Multimodal image token layer evaluation failed with status, %d", eval_rsp)
 	}
 
 	// 12. Read vector mapping state layers out from your execution block
+
 	nEmbd := llama.ModelNEmbd(model)
+
 	vec, err := llama.GetEmbeddingsSeq(emb_ctx, 0, nEmbd)
+
 	if err != nil {
 		return nil, fmt.Errorf("Failed to extract multimodal embeddings from context, %w", err)
 	}
 
 	// 13. Perform standard normalizing matrix reduction formulas
+
 	var sum float64
+
 	for _, v := range vec {
 		sum += float64(v * v)
 	}
+
 	if sum > 0 {
+
 		sum = math.Sqrt(sum)
 		norm := float32(1.0 / sum)
+
 		for i := range vec {
 			vec[i] = vec[i] * norm
 		}
 	}
 
 	// 14. Package elements to match required interface models
+
 	now := time.Now()
 	ts := now.Unix()
 	model_name := filepath.Base(req.Model)
@@ -496,6 +515,24 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 	}
 
 	return rsp, nil
+}
+
+// Close releases resources held by the yzma backend.  It also removes any temporary directories that were created for downloading the yzma binary.
+func (e *YzmaEmbedder[T]) Close() error {
+
+	llama.Close()
+
+	if e.tmp_dir != "" {
+
+		slog.Debug("Remove tmp dir", "path", e.tmp_dir)
+		err := os.RemoveAll(e.tmp_dir)
+
+		if err != nil {
+			slog.Error("Failed to remove tmp dir", "path", e.tmp_dir, "error", err)
+		}
+	}
+
+	return nil
 }
 
 // getModelForRequest ensures that the model referenced in the request exists
