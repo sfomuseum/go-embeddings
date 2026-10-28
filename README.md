@@ -561,6 +561,7 @@ Where `{PATH_TO_YZMA}` is the path the yzma-specific llama.cpp build. If empty t
 | context-size | int | no | Maximum number of tokens in a llama context. If omitted, the default of 0 (use library default) is used. |
 | batch-size | int | no | Maximum number of tokens processed per batch. If omitted, default is 2048. |
 | pooling | string | no  Pooling strategy used to aggregate token embeddings.  Accepted values are the same strings that the `llama.PoolingType` type understands (e.g. `"mean"`, `"sum"`).  The default is `"mean"`. |
+| ngl | int | no | GPU offload layer count. Default is -1 |
 | processor | string | no | Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will automatically select an appropriate processor. |
 | version | string | no | The yzma release version to download.  The  default is "" which corresponding to the most recently tagged release of `hybridgroup/yzma`. |
 | model-root | string | no | Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root (`lib_path`) is used. |
@@ -598,6 +599,20 @@ $> ./bin/embeddings \
 
 2026/09/04 16:11:58 DEBUG Remove tmp dir path=/var/folders/_k/h7ndzcyx3dq027gsrg1q45xm0000gn/T/yzma3627492138
 ```
+
+Image embeddings are also supported for multimodal models. For example:
+
+```
+$> ./bin/embeddings \
+	-client-uri 'yzma:///usr/local/sfomuseum/yzma?ngl=16&context-size=4096' \
+	-model https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/main/embeddinggemma-2-Q8_0.gguf \
+	image \
+	fixtures/1527845303_walrus.jpg
+
+{"embeddings":[-0.015751032,-0.015909415,0.023781637,0.012932265,-0.029196 ... and so on
+```
+
+_Note: For "computer reasons" the `embeddinggemma-2` model returns 512-dimension embeddings (instead of the default 768) when run through `llama.cpp` (which is what the `yzma` embedder is using under the hood)._
 
 ## Tests
 
