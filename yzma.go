@@ -74,8 +74,9 @@ func init() {
 //   - **ngl**            - GPU offload layer count. Default is -1.
 //   - **processor**      – Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will
 //     automatically select an appropriate processor.
-//   - **version**        – The yzma release version to download.  The  default is `"v0.3.0"`.  The value should be a full git tag (e.g.
+//   - **llama-version**  – The yzma release version to download.  The  default is `"v0.3.0"`.  The value should be a full git tag (e.g.
 //     `v0.3.0`), not an empty string.
+//   - **llama-auto-update** - Boolean flag signaling whether the most recent tagged llama.cpp should be downloaded. Default is false.
 //   - **model-root**     – Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root
 //     (`lib_path`) is used.
 func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
@@ -201,7 +202,8 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 
 		v := q.Get("llama-version")
 
-		slog.Info("WYF", "v", v)
+		slog.Debug("Ensure llama version", "version", v)
+
 		err := download.VersionIsValid(v)
 
 		if err != nil {
@@ -209,6 +211,9 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		}
 
 		current := llama.Version()
+
+		// Womp womp...
+		// https://github.com/hybridgroup/yzma/blob/v1.31.0/pkg/download/download.go#L51
 
 		v_nopr := strings.Replace(v, "v", "", 1)
 
@@ -220,7 +225,6 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	}
 
 	slog.Debug("Load llama", "fetch", llama_fetch, "version", llama_version)
-	panic("woo")
 
 	if llama_fetch {
 
@@ -242,12 +246,12 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			return nil, fmt.Errorf("Failed to download llama, %w", err)
 		}
 
-		err = llama.Load(lib_path)
+	}
 
-		if err != nil {
-			return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
-		}
+	err = llama.Load(lib_path)
 
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
 
 	logger := slog.Default()
