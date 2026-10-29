@@ -23,7 +23,7 @@ func ResizeIfOversized(body []byte, max_px int) ([]byte, error) {
 	total_px := cfg.Width * cfg.Height
 
 	slog.Debug("Image size", "total pixels", total_px, "max pixels", max_px)
-	
+
 	if total_px <= max_px {
 		return body, nil // Fits safely inside token boundaries
 	}
