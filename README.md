@@ -605,7 +605,7 @@ Image embeddings are also supported for multimodal models. For example, using th
 ```
 $> ./bin/embeddings \
 	-client-uri 'yzma:///usr/local/sfomuseum/yzma?ngl=16&context-size=4096' \
-	-model https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/main/embeddinggemma-2-Q8_0.gguf \
+	-model https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/main/embeddinggemma-2-BF16.gguf \
 	image \
 	fixtures/1527845303_walrus.jpg
 
