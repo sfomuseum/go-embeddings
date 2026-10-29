@@ -11,7 +11,7 @@ package download
 //
 // Set it in the same commit that bumps version.go, then set it back to "" after the
 // release is tagged.
-var DefaultVersion = "v0.7.0@sha256:f8fac86089bf92657fd33fa1ea0f2ee147b4c729567a99610c64a150d7ca97d3"
+var DefaultVersion = "v0.8.0@sha256:595f24649715d6ff036866168defbecd087a5436f0de499fe5be20b418ed1b3e"
 
 // DefaultTag returns [DefaultVersion] without its digest, for display to users. It
 // returns "" when there is no default version.
