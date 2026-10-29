@@ -42,6 +42,8 @@ type YzmaEmbedder[T Float] struct {
 	tmp_dir string
 	// lib_path is the path to the yzma library binaries.
 	lib_path string
+	// enable verbose llama.cpp logging
+	llama_verbose bool
 }
 
 func init() {
@@ -78,6 +80,7 @@ func init() {
 //     `v0.3.0`), not an empty string.
 //   - **model-root**     – Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root
 //     (`lib_path`) is used.
+//   - **llama-verbose**  - Enable verbose llama.cpp logging.
 func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
@@ -172,9 +175,20 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
 
-	logger := slog.Default()
+	llama_verbose := false
 
-	if !logger.Enabled(ctx, slog.LevelDebug) {
+	if q.Has("llama-verbose") {
+
+		v, err := strconv.ParseBool(q.Get("llama-verbose"))
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse ?llama-verbose query parameter, %w", err)
+		}
+
+		llama_verbose = v
+	}
+
+	if !llama_verbose {
 		llama.LogSet(llama.LogSilent())
 	}
 
@@ -243,15 +257,16 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	}
 
 	e := &YzmaEmbedder[T]{
-		precision:    precision,
-		scheme:       u.Scheme,
-		context_sz:   context_sz,
-		batch_sz:     batch_sz,
-		ngpu_layers:  ngpu_layers,
-		pooling_type: pooling_type,
-		model_root:   model_root,
-		tmp_dir:      tmp_dir,
-		lib_path:     lib_path,
+		precision:     precision,
+		scheme:        u.Scheme,
+		context_sz:    context_sz,
+		batch_sz:      batch_sz,
+		ngpu_layers:   ngpu_layers,
+		pooling_type:  pooling_type,
+		model_root:    model_root,
+		tmp_dir:       tmp_dir,
+		lib_path:      lib_path,
+		llama_verbose: llama_verbose,
 	}
 
 	return e, nil
@@ -325,9 +340,7 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 		return nil, fmt.Errorf("Failed to load mtmd library from %s, %w", e.lib_path, err)
 	}
 
-	logger := slog.Default()
-
-	if !logger.Enabled(ctx, slog.LevelDebug) {
+	if !e.llama_verbose {
 		mtmd.LogSet(llama.LogSilent())
 	}
 
