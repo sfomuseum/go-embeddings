@@ -8,6 +8,7 @@ require (
 	github.com/sfomuseum/go-encoderfile v0.0.1
 	github.com/sfomuseum/go-flags v0.12.1
 	github.com/sfomuseum/go-mobileclip v0.1.3
+	golang.org/x/image v0.47.0
 )
 
 require (
