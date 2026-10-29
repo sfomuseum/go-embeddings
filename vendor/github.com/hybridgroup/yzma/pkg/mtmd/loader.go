@@ -36,9 +36,17 @@ func Load(path string) error {
 		return err
 	}
 
+	if err := loadCapabilityFuncs(lib); err != nil {
+		return err
+	}
+
+	if err := loadAudioStreamFuncs(lib); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func loadError(name string, err error) error {
-	return fmt.Errorf("could not load '': %w", err)
+	return fmt.Errorf("could not load %q: %w", name, err)
 }

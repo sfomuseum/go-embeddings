@@ -42,6 +42,8 @@ type YzmaEmbedder[T Float] struct {
 	tmp_dir string
 	// lib_path is the path to the yzma library binaries.
 	lib_path string
+	// the maximum number of pixels an image can have before it is automatically resized
+	llama_max_pixels int
 	// enable verbose llama.cpp logging
 	llama_verbose bool
 }
@@ -80,6 +82,7 @@ func init() {
 //     `v0.3.0`), not an empty string.
 //   - **model-root**     – Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root
 //     (`lib_path`) is used.
+//   - **llama-max-pixels** - The maximum number of pixels in an image to be embedded before it is automatically resized. Default is 400, 000.
 //   - **llama-verbose**  - Enable verbose llama.cpp logging.
 func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
@@ -175,6 +178,11 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
 
+	context_sz := 0
+	batch_sz := 2048
+	ngpu_layers := -1
+	pooling := "mean"
+	max_pixels := 400000
 	llama_verbose := false
 
 	if q.Has("llama-verbose") {
@@ -195,11 +203,6 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	llama.Init()
 
 	// We call llama.Close in Close() below
-
-	context_sz := 0
-	batch_sz := 2048
-	ngpu_layers := -1
-	pooling := "mean"
 
 	if q.Has("context-size") {
 
@@ -256,17 +259,29 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		pooling_type = llama.PoolingTypeUnspecified
 	}
 
+	if q.Has("llama-max-pixels") {
+
+		v, err := strconv.Atoi(q.Get("llama-max-pixels"))
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse ?llama-max-pixels query parameter, %w", err)
+		}
+
+		max_pixels = v
+	}
+
 	e := &YzmaEmbedder[T]{
-		precision:     precision,
-		scheme:        u.Scheme,
-		context_sz:    context_sz,
-		batch_sz:      batch_sz,
-		ngpu_layers:   ngpu_layers,
-		pooling_type:  pooling_type,
-		model_root:    model_root,
-		tmp_dir:       tmp_dir,
-		lib_path:      lib_path,
-		llama_verbose: llama_verbose,
+		precision:        precision,
+		scheme:           u.Scheme,
+		context_sz:       context_sz,
+		batch_sz:         batch_sz,
+		ngpu_layers:      ngpu_layers,
+		pooling_type:     pooling_type,
+		model_root:       model_root,
+		tmp_dir:          tmp_dir,
+		lib_path:         lib_path,
+		llama_verbose:    llama_verbose,
+		llama_max_pixels: max_pixels,
 	}
 
 	return e, nil
@@ -414,6 +429,12 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 
 	defer mtmd.Free(mtmd_ctx)
 
+	im_body, err := ResizeIfOversized(req.Body, e.llama_max_pixels)
+
+	if err != nil {
+		return nil, err
+	}
+
 	tmp_im, err := os.CreateTemp("", "yzma-img-*.jpg")
 
 	if err != nil {
@@ -423,7 +444,7 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 	defer os.Remove(tmp_im.Name())
 	defer tmp_im.Close()
 
-	_, err = tmp_im.Write(req.Body)
+	_, err = tmp_im.Write(im_body)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to write image data to temporary file, %w", err)

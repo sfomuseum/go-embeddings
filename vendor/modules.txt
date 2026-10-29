@@ -333,7 +333,7 @@ github.com/hashicorp/go-getter/helper/url
 # github.com/hashicorp/go-version v1.8.0
 ## explicit
 github.com/hashicorp/go-version
-# github.com/hybridgroup/yzma v1.30.0
+# github.com/hybridgroup/yzma v1.31.0
 ## explicit; go 1.26.0
 github.com/hybridgroup/yzma/pkg/download
 github.com/hybridgroup/yzma/pkg/llama
@@ -468,6 +468,10 @@ golang.org/x/crypto/cryptobyte/asn1
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/alias
 golang.org/x/crypto/internal/poly1305
+# golang.org/x/image v0.47.0
+## explicit; go 1.26.0
+golang.org/x/image/draw
+golang.org/x/image/math/f64
 # golang.org/x/net v0.62.0
 ## explicit; go 1.26.0
 golang.org/x/net/http/httpguts
