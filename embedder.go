@@ -23,6 +23,15 @@ type EmbedderInitializationFunc[T Float] func(ctx context.Context, uri string) (
 
 var embedder_roster roster.Roster
 
+func MustRegisterEmbedder[T Float](ctx context.Context, scheme string, init_func EmbedderInitializationFunc[T]) {
+
+	err := RegisterEmbedder(ctx, scheme, init_func)
+
+	if err != nil {
+		panic(err)
+	}
+}
+
 // RegisterEmbedder registers 'scheme' as a key pointing to 'init_func' in an internal lookup table
 // used to create new `Embedder` instances by the `NewEmbedder` method.
 func RegisterEmbedder[T Float](ctx context.Context, scheme string, init_func EmbedderInitializationFunc[T]) error {

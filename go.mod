@@ -4,6 +4,7 @@ go 1.27.3
 
 require (
 	github.com/aaronland/go-roster v1.0.0
+	github.com/gabriel-vasile/mimetype v1.4.16
 	github.com/hybridgroup/yzma v1.31.0
 	github.com/sfomuseum/go-encoderfile v0.0.1
 	github.com/sfomuseum/go-flags v0.12.1

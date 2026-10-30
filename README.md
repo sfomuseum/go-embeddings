@@ -181,13 +181,50 @@ encoderfile://?{PARAMETERS}
 * https://www.mozilla.ai/open-tools/encoderfile
 * https://github.com/sfomuseum/go-encoderfile
 
+### llamacpp://
+
+Derive vector embeddings from an instance the [llama.cpp server](https://llama.app/docs/serve) API.
+
+```
+llamacpp://?{PARAMETERS}
+```
+
+Valid query parameters are:
+
+| Name | Value | Required | Notes |
+| --- | --- | --- | --- |
+| client-uri | string | no | The URI for the `llamacpp` HTTP server endpoint. Default is `http://localhost:9931`. |
+
+For example:
+
+```
+$> llama serve -hf ggml-org/embeddinggemma-2-GGUF:Q8_0 --embeddings
+```
+
+And then in another terminal:
+
+```		
+$> ./bin/embeddings -verbose -client-uri llamacpp:// image fixtures/1527845303_walrus.jpg
+2026/10/30 11:44:29 DEBUG Verbose logging enabled
+{"embeddings":[ ... ],"model":"ggml-org/embeddinggemma-2-GGUF:Q8_0","created":1793385870,"precision":"float32"}
+```
+
+_Note the absence of a `-model` flag. This is determined by the `llama.cpp` server (started above)._
+
+#### See also
+
+* https://llama.app
+* https://llama.app/models
+
 ### llamafile://
 
-Derive vector embedding from an instance of the Mozilla [llamafile](#) application. Note that newer versions of `llamafile` not longer expose an interface for deriving embeddings so this implementation will only work with older builds. See the `encoderfile://` implementation for an alternative.
+Derive vector embedding from an instance of the Mozilla [llamafile](https://github.com/mozilla-ai/llamafile) application. Note that newer versions of `llamafile` not longer expose an interface for deriving embeddings so this implementation will only work with older builds. See the `encoderfile://` implementation for an alternative.
 
 ```
 llamafile://?{PARAMETERS}
 ```
+
+Valid query parameters are:
 
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
@@ -614,7 +651,15 @@ $> ./bin/embeddings \
 {"embeddings":[-0.015751032,-0.015909415,0.023781637,0.012932265,-0.029196 ... and so on
 ```
 
-_Note: For "computer reasons" the `embeddinggemma-2` model returns 512-dimension embeddings (instead of the default 768) when run through `llama.cpp` (which is what the `yzma` embedder is using under the hood)._
+#### Notes
+
+##### embeddinggemma-2
+
+For "computer reasons" the `embeddinggemma-2` model returns 512-dimension embeddings (instead of the default 768) when run through `llama.cpp` (which is what the `yzma` embedder is using under the hood). It also producing _noticeably_ weird and inconsistent (incorrect) similarity results when compared to the [API-based `llamacpp://` embedder](#llamacpp), described above. This could very easily be caused by coding errors on my part. I haven't figured it out yet.
+
+#### See also
+
+* https://yzma.ai/
 
 ## Tests
 
@@ -623,6 +668,7 @@ Because so many of the implementations above depend on the availability of exter
 | Implementation | Build tag |
 | --- | --- |
 | encoderfile:// | encoderfile |
+| llamacpp:// | llamacpp |
 | llamafile:// | llamafile |
 | mlxclip:// | mlxclip |
 | mobileclip:// | mobileclip |
