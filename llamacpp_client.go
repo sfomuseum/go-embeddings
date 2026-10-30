@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+
+	"os"
 )
 
 type llamaCppEmbeddingsInput struct {
@@ -28,11 +30,12 @@ type llamaCppEmbeddingsImageURL struct {
 }
 
 type llamaCppEmbeddingsRequest struct {
-	Input          []llamaCppEmbeddingsInput `json:"input"`
-	Model          string                    `json:"model"`
-	EncodingFormat string                    `json:"encoding_format"`
+	Input          []any  `json:"input"` // Flexible to match string vs multimodal spec
+	Model          string `json:"model,omitempty"`
+	EncodingFormat string `json:"encoding_format"`
 }
 
+// Fix me...
 type llamaCppEmbeddingsResponse struct {
 	Model           string      `json:"model"`
 	Embeddings      [][]float32 `json:"embeddings"`
@@ -66,24 +69,27 @@ func newLlamaCppClient(ctx context.Context, uri string) (*llamaCppClient, error)
 	return cl, nil
 }
 
+// curl -v -d '{"encoding_format":"float","input":[{"content":[{"text":"Describe this image","type":"text"}]}]}' http://127.0.0.1:9931/v1/embeddings
+
 func (o *llamaCppClient) embeddings(ctx context.Context, model string, embeddings_type string, body []byte) (*llamaCppEmbeddingsResponse, error) {
 
-	var content llamaCppEmbeddingsContentItem
+	var content any
 
 	switch embeddings_type {
 	case "text":
 
-		content = llamaCppEmbeddingsContentItem{
-			Type: "text",
-			Text: string(body),
-		}
+
+			content = llamaCppEmbeddingsContentItem{
+				Type: "text",
+				Text: string(body),
+			}
 
 	case "image":
 
 		b64 := base64.StdEncoding.EncodeToString(body)
 
 		content = llamaCppEmbeddingsContentItem{
-			Type: "image",
+			Type: "image_url",
 			ImageURL: &llamaCppEmbeddingsImageURL{
 				URL: fmt.Sprintf("data:image/jpeg;base64,%s", b64),
 			},
@@ -93,17 +99,15 @@ func (o *llamaCppClient) embeddings(ctx context.Context, model string, embedding
 		return nil, fmt.Errorf("Invalid embeddings type")
 	}
 
-	input := []llamaCppEmbeddingsInput{
-		llamaCppEmbeddingsInput{
-			Content: []llamaCppEmbeddingsContentItem{
-				content,
-			},
+	input := map[string]any{
+		"content": []any{
+			content,
 		},
 	}
 
 	req := &llamaCppEmbeddingsRequest{
-		Model:          model,
-		Input:          input,
+		// Model:          model,
+		Input:          []any{input},
 		EncodingFormat: "float",
 	}
 
@@ -135,7 +139,7 @@ func (o *llamaCppClient) embeddings(ctx context.Context, model string, embedding
 	return emb_rsp, nil
 }
 
-func (o *llamaCppClient) execute(ctx context.Context, path string, r io.Reader) (io.ReadCloser, error) {
+func (o *llamaCppClient) execute(ctx context.Context, path string, r io.ReadSeeker) (io.ReadCloser, error) {
 
 	u := url.URL{}
 	u.Scheme = o.scheme
@@ -147,6 +151,13 @@ func (o *llamaCppClient) execute(ctx context.Context, path string, r io.Reader) 
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	r2 := req.Clone(ctx)
+	r2.Write(os.Stdout)
+
+	r.Seek(0, 0)
 
 	rsp, err := o.client.Do(req)
 
