@@ -1,8 +1,11 @@
 package embeddings
 
+// https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#post-v1embeddings-openai-compatible-embeddings-api
+
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,9 +13,24 @@ import (
 	"net/url"
 )
 
+type llamaCppEmbeddingsInput struct {
+	Content []llamaCppEmbeddingsContentItem `json:"content"`
+}
+
+type llamaCppEmbeddingsContentItem struct {
+	Type     string                      `json:"type"`
+	Text     string                      `json:"text,omitempty"`
+	ImageURL *llamaCppEmbeddingsImageURL `json:"image_url,omitempty"`
+}
+
+type llamaCppEmbeddingsImageURL struct {
+	URL string `json:"url"`
+}
+
 type llamaCppEmbeddingsRequest struct {
-	Model string `json:"model"`
-	Input string `json:"input"`
+	Input          []llamaCppEmbeddingsInput `json:"input"`
+	Model          string                    `json:"model"`
+	EncodingFormat string                    `json:"encoding_format"`
 }
 
 type llamaCppEmbeddingsResponse struct {
@@ -48,11 +66,45 @@ func newLlamaCppClient(ctx context.Context, uri string) (*llamaCppClient, error)
 	return cl, nil
 }
 
-func (o *llamaCppClient) embeddings(ctx context.Context, model string, input string) (*llamaCppEmbeddingsResponse, error) {
+func (o *llamaCppClient) embeddings(ctx context.Context, model string, embeddings_type string, body []byte) (*llamaCppEmbeddingsResponse, error) {
+
+	var content llamaCppEmbeddingsContentItem
+
+	switch embeddings_type {
+	case "text":
+
+		content = llamaCppEmbeddingsContentItem{
+			Type: "text",
+			Text: string(body),
+		}
+
+	case "image":
+
+		b64 := base64.StdEncoding.EncodeToString(body)
+
+		content = llamaCppEmbeddingsContentItem{
+			Type: "image",
+			ImageURL: &llamaCppEmbeddingsImageURL{
+				URL: fmt.Sprintf("data:image/jpeg;base64,%s", b64),
+			},
+		}
+
+	default:
+		return nil, fmt.Errorf("Invalid embeddings type")
+	}
+
+	input := []llamaCppEmbeddingsInput{
+		llamaCppEmbeddingsInput{
+			Content: []llamaCppEmbeddingsContentItem{
+				content,
+			},
+		},
+	}
 
 	req := &llamaCppEmbeddingsRequest{
-		Model: model,
-		Input: input,
+		Model:          model,
+		Input:          input,
+		EncodingFormat: "float",
 	}
 
 	enc, err := json.Marshal(req)
@@ -61,9 +113,9 @@ func (o *llamaCppClient) embeddings(ctx context.Context, model string, input str
 		return nil, err
 	}
 
-	body := bytes.NewReader(enc)
+	br := bytes.NewReader(enc)
 
-	rsp, err := o.execute(ctx, "/api/embed", body)
+	rsp, err := o.execute(ctx, "/v1/embeddings", br)
 
 	if err != nil {
 		return nil, err
@@ -84,9 +136,6 @@ func (o *llamaCppClient) embeddings(ctx context.Context, model string, input str
 }
 
 func (o *llamaCppClient) execute(ctx context.Context, path string, r io.Reader) (io.ReadCloser, error) {
-
-	// http_ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	// defer cancel()
 
 	u := url.URL{}
 	u.Scheme = o.scheme

@@ -11,7 +11,7 @@ import (
 // LlamaCppEmbedder implements the `Embedder` interface using an LlamaCpp API endpoint to derive embeddings.
 type LlamaCppEmbedder[T Float] struct {
 	Embedder[T]
-	client    *ollamaClient
+	client    *llamaCppClient
 	model     string
 	precision string
 }
@@ -28,7 +28,7 @@ func init() {
 		s32 := fmt.Sprintf("%s32", s)
 		s64 := fmt.Sprintf("%s64", s)
 
-		MusrRegisterEmbedder[float32](ctx, s, NewLlamaCppEmbedder[float32])
+		MustRegisterEmbedder[float32](ctx, s, NewLlamaCppEmbedder[float32])
 		MustRegisterEmbedder[float32](ctx, s32, NewLlamaCppEmbedder[float32])
 		MustRegisterEmbedder[float64](ctx, s64, NewLlamaCppEmbedder[float64])
 	}
@@ -44,7 +44,7 @@ func NewLlamaCppEmbedder[T Float](ctx context.Context, uri string) (Embedder[T],
 
 	q := u.Query()
 
-	client_uri := "http://localhost:11434"
+	client_uri := "http://localhost:9931"
 
 	if q.Has("client-uri") {
 		client_uri = q.Get("client-uri")
@@ -74,6 +74,14 @@ func NewLlamaCppEmbedder[T Float](ctx context.Context, uri string) (Embedder[T],
 }
 
 func (e *LlamaCppEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+	return e.getEmbeddings(ctx, "text", req)
+}
+
+func (e *LlamaCppEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
+	return e.getEmbeddings(ctx, "image", req)
+}
+
+func (e *LlamaCppEmbedder[T]) getEmbeddings(ctx context.Context, embeddings_type string, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
 	model := e.model
 
@@ -85,7 +93,7 @@ func (e *LlamaCppEmbedder[T]) TextEmbeddings(ctx context.Context, req *Embedding
 		return nil, fmt.Errorf("Missing model")
 	}
 
-	cl_rsp, err := e.client.embeddings(ctx, model, string(req.Body))
+	cl_rsp, err := e.client.embeddings(ctx, model, embeddings_type, req.Body)
 
 	if err != nil {
 		return nil, err
@@ -102,7 +110,7 @@ func (e *LlamaCppEmbedder[T]) TextEmbeddings(ctx context.Context, req *Embedding
 
 	rsp := &CommonEmbeddingsResponse[T]{
 		CommonId:        req.Id,
-		CommonModel:     fmt.Sprintf("ollama/%s", e.model),
+		CommonModel:     fmt.Sprintf("llamacpp/%s", e.model),
 		CommonCreated:   ts,
 		CommonPrecision: e.precision,
 	}
@@ -115,10 +123,6 @@ func (e *LlamaCppEmbedder[T]) TextEmbeddings(ctx context.Context, req *Embedding
 	}
 
 	return rsp, nil
-}
-
-func (e *LlamaCppEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
-	return nil, NotImplemented
 }
 
 func (e *LlamaCppEmbedder[T]) Close() error {
