@@ -655,7 +655,7 @@ $> ./bin/embeddings \
 
 ##### embeddinggemma-2
 
-For "computer reasons" the `embeddinggemma-2` model returns 512-dimension embeddings (instead of the default 768) when run through `llama.cpp` (which is what the `yzma` embedder is using under the hood). It also producing _noticeably_ weird and inconsistent (incorrect) similarity results when compared to the API-based `llamacpp://` embedder, decsribed above. This could very easily be caused by coding errors on my part. I haven't figured it out yet.
+For "computer reasons" the `embeddinggemma-2` model returns 512-dimension embeddings (instead of the default 768) when run through `llama.cpp` (which is what the `yzma` embedder is using under the hood). It also producing _noticeably_ weird and inconsistent (incorrect) similarity results when compared to the [API-based `llamacpp://` embedder](#llamacpp), described above. This could very easily be caused by coding errors on my part. I haven't figured it out yet.
 
 #### See also
 
@@ -668,6 +668,7 @@ Because so many of the implementations above depend on the availability of exter
 | Implementation | Build tag |
 | --- | --- |
 | encoderfile:// | encoderfile |
+| llamacpp:// | llamacpp |
 | llamafile:// | llamafile |
 | mlxclip:// | mlxclip |
 | mobileclip:// | mobileclip |
