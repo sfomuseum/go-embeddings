@@ -91,9 +91,7 @@ func (e *LlamaCppEmbedder[T]) getEmbeddings(ctx context.Context, embeddings_type
 		model = req.Model
 	}
 
-	if model == "" {
-		return nil, fmt.Errorf("Missing model")
-	}
+	// Note: Munging model in anticipation of a time when llama.cpp allows Ollama-style model toggling
 
 	cl_rsp, err := e.client.embeddings(ctx, model, embeddings_type, req.Body)
 
@@ -112,7 +110,7 @@ func (e *LlamaCppEmbedder[T]) getEmbeddings(ctx context.Context, embeddings_type
 
 	rsp := &CommonEmbeddingsResponse[T]{
 		CommonId:        req.Id,
-		CommonModel:     fmt.Sprintf("llamacpp/%s", e.model),
+		CommonModel:     cl_rsp.Model,
 		CommonCreated:   ts,
 		CommonPrecision: e.precision,
 	}
