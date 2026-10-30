@@ -11,8 +11,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
-	"os"
+	"github.com/gabriel-vasile/mimetype"
 )
 
 type llamaCppEmbeddingsInput struct {
@@ -35,13 +36,25 @@ type llamaCppEmbeddingsRequest struct {
 	EncodingFormat string `json:"encoding_format"`
 }
 
-// Fix me...
+// llamaCppEmbeddingsEmbeddingsResponse represents the top-level JSON response from the /v1/embeddings endpoint.
 type llamaCppEmbeddingsResponse struct {
-	Model           string      `json:"model"`
-	Embeddings      [][]float32 `json:"embeddings"`
-	TotalDuration   int64       `json:"total_duration"`
-	LoadDuration    int64       `json:"load_duration"`
-	PromptEvalCount int64       `json:"prompt_eval_count"`
+	Object string                            `json:"object"`
+	Data   []llamaCppEmbeddingsEmbeddingData `json:"data"`
+	Model  string                            `json:"model"`
+	Usage  llamaCppEmbeddingsUsage           `json:"usage"`
+}
+
+// llamaCppEmbeddingsEmbeddingData represents an individual vector and its position index.
+type llamaCppEmbeddingsEmbeddingData struct {
+	Object    string    `json:"object"`
+	Index     int       `json:"index"`
+	Embedding []float32 `json:"embedding"`
+}
+
+// llamaCppEmbeddingsUsage captures the token metrics for billing and limit tracking.
+type llamaCppEmbeddingsUsage struct {
+	PromptTokens int `json:"prompt_tokens"`
+	TotalTokens  int `json:"total_tokens"`
 }
 
 type llamaCppClient struct {
@@ -69,29 +82,35 @@ func newLlamaCppClient(ctx context.Context, uri string) (*llamaCppClient, error)
 	return cl, nil
 }
 
-// curl -v -d '{"encoding_format":"float","input":[{"content":[{"text":"Describe this image","type":"text"}]}]}' http://127.0.0.1:9931/v1/embeddings
-
 func (o *llamaCppClient) embeddings(ctx context.Context, model string, embeddings_type string, body []byte) (*llamaCppEmbeddingsResponse, error) {
+
+	// Note: Leaving model in the method signature for a time when llama.cpp
+	// allows Ollama-style model toggling
 
 	var content any
 
 	switch embeddings_type {
 	case "text":
 
-
-			content = llamaCppEmbeddingsContentItem{
-				Type: "text",
-				Text: string(body),
-			}
+		content = llamaCppEmbeddingsContentItem{
+			Type: "text",
+			Text: string(body),
+		}
 
 	case "image":
+
+		m := mimetype.Detect(body)
+
+		if !strings.HasPrefix(m.String(), "image/") {
+			return nil, fmt.Errorf("Failed to determine image mimetype")
+		}
 
 		b64 := base64.StdEncoding.EncodeToString(body)
 
 		content = llamaCppEmbeddingsContentItem{
 			Type: "image_url",
 			ImageURL: &llamaCppEmbeddingsImageURL{
-				URL: fmt.Sprintf("data:image/jpeg;base64,%s", b64),
+				URL: fmt.Sprintf("data:%s;base64,%s", m.String(), b64),
 			},
 		}
 
@@ -106,7 +125,6 @@ func (o *llamaCppClient) embeddings(ctx context.Context, model string, embedding
 	}
 
 	req := &llamaCppEmbeddingsRequest{
-		// Model:          model,
 		Input:          []any{input},
 		EncodingFormat: "float",
 	}
@@ -154,10 +172,9 @@ func (o *llamaCppClient) execute(ctx context.Context, path string, r io.ReadSeek
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	r2 := req.Clone(ctx)
-	r2.Write(os.Stdout)
-
-	r.Seek(0, 0)
+	// r2 := req.Clone(ctx)
+	// r2.Write(os.Stdout)
+	// r.Seek(0, 0)
 
 	rsp, err := o.client.Do(req)
 

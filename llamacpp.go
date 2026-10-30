@@ -1,5 +1,7 @@
 package embeddings
 
+// llama serve -hf ggml-org/embeddinggemma-2-GGUF:Q8_0 --embeddings
+
 import (
 	"context"
 	"fmt"
@@ -99,11 +101,11 @@ func (e *LlamaCppEmbedder[T]) getEmbeddings(ctx context.Context, embeddings_type
 		return nil, err
 	}
 
-	if len(cl_rsp.Embeddings) == 0 {
+	if len(cl_rsp.Data[0].Embedding) == 0 {
 		return nil, fmt.Errorf("Model returned no embeddings")
 	}
 
-	e32 := cl_rsp.Embeddings[0]
+	e32 := cl_rsp.Data[0].Embedding
 
 	now := time.Now()
 	ts := now.Unix()
