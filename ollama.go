@@ -29,9 +29,9 @@ func init() {
 		s32 := fmt.Sprintf("%s32", s)
 		s64 := fmt.Sprintf("%s64", s)
 
-		RegisterEmbedder[float32](ctx, s, NewOllamaEmbedder[float32])
-		RegisterEmbedder[float32](ctx, s32, NewOllamaEmbedder[float32])
-		RegisterEmbedder[float64](ctx, s64, NewOllamaEmbedder[float64])
+		MustRegisterEmbedder[float32](ctx, s, NewOllamaEmbedder[float32])
+		MustRegisterEmbedder[float32](ctx, s32, NewOllamaEmbedder[float32])
+		MustRegisterEmbedder[float64](ctx, s64, NewOllamaEmbedder[float64])
 	}
 }
 

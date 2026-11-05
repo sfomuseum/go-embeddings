@@ -600,7 +600,7 @@ Where `{PATH_TO_YZMA}` is the path the yzma-specific llama.cpp build. If empty t
 | pooling | string | no  Pooling strategy used to aggregate token embeddings.  Accepted values are the same strings that the `llama.PoolingType` type understands (e.g. `"mean"`, `"sum"`).  The default is `"mean"`. |
 | ngl | int | no | GPU offload layer count. Default is -1 |
 | processor | string | no | Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will automatically select an appropriate processor. |
-| version | string | no | The yzma release version to download.  The  default is "" which corresponding to the most recently tagged release of `hybridgroup/yzma`. |
+| version | string | no | The yzma release version to use. The  default is whatever is associated with the current version of `hybridgroup/yzma`.  The value should be a full git tag (e.g. `v0.3.0`). |
 | model-root | string | no | Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root (`lib_path`) is used. |
 | llama-max-pixels | int | no | The maximum number of pixels an image can have before it is automatically resized. Default is 400, 000. |
 | llama-verbose | bool | no | Enable verbose llama.cpp logging. |

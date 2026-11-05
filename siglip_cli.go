@@ -14,9 +14,9 @@ import (
 
 func init() {
 	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "siglip", NewSigLIPCommandLineEmbedder)
-	RegisterEmbedder[float32](ctx, "siglip32", NewSigLIPCommandLineEmbedder)
-	RegisterEmbedder[float64](ctx, "siglip64", NewSigLIPCommandLineEmbedder)
+	MustRegisterEmbedder[float32](ctx, "siglip", NewSigLIPCommandLineEmbedder)
+	MustRegisterEmbedder[float32](ctx, "siglip32", NewSigLIPCommandLineEmbedder)
+	MustRegisterEmbedder[float64](ctx, "siglip64", NewSigLIPCommandLineEmbedder)
 }
 
 type SigLIPCommandLineEmbedder[T Float] struct {

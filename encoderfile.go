@@ -26,9 +26,9 @@ type EncoderfileEmbedder[T Float] struct {
 
 func init() {
 	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "encoderfile", NewEncoderfileEmbedder)
-	RegisterEmbedder[float32](ctx, "encoderfile32", NewEncoderfileEmbedder)
-	RegisterEmbedder[float64](ctx, "encoderfile64", NewEncoderfileEmbedder)
+	MustRegisterEmbedder[float32](ctx, "encoderfile", NewEncoderfileEmbedder)
+	MustRegisterEmbedder[float32](ctx, "encoderfile32", NewEncoderfileEmbedder)
+	MustRegisterEmbedder[float64](ctx, "encoderfile64", NewEncoderfileEmbedder)
 }
 
 func NewEncoderfileEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {

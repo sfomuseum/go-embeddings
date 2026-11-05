@@ -22,9 +22,9 @@ type MobileCLIPEmbedder[T Float] struct {
 
 func init() {
 	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "mobileclip", NewMobileCLIPEmbedder)
-	RegisterEmbedder[float32](ctx, "mobileclip32", NewMobileCLIPEmbedder)
-	RegisterEmbedder[float64](ctx, "mobileclip64", NewMobileCLIPEmbedder)
+	MustRegisterEmbedder[float32](ctx, "mobileclip", NewMobileCLIPEmbedder)
+	MustRegisterEmbedder[float32](ctx, "mobileclip32", NewMobileCLIPEmbedder)
+	MustRegisterEmbedder[float64](ctx, "mobileclip64", NewMobileCLIPEmbedder)
 }
 
 func NewMobileCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {

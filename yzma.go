@@ -51,9 +51,9 @@ type YzmaEmbedder[T Float] struct {
 func init() {
 	ctx := context.Background()
 
-	RegisterEmbedder[float32](ctx, "yzma", NewYzmaEmbedder[float32])
-	RegisterEmbedder[float32](ctx, "yzma32", NewYzmaEmbedder[float32])
-	RegisterEmbedder[float64](ctx, "yzma64", NewYzmaEmbedder[float64])
+	MustRegisterEmbedder[float32](ctx, "yzma", NewYzmaEmbedder[float32])
+	MustRegisterEmbedder[float32](ctx, "yzma32", NewYzmaEmbedder[float32])
+	MustRegisterEmbedder[float64](ctx, "yzma64", NewYzmaEmbedder[float64])
 }
 
 // NewYzmaEmbedder creates a new YzmaEmbedder based on the provided URI.
@@ -78,8 +78,8 @@ func init() {
 //   - **ngl**            - GPU offload layer count. Default is -1.
 //   - **processor**      – Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will
 //     automatically select an appropriate processor.
-//   - **version**        – The yzma release version to download.  The  default is `"v0.3.0"`.  The value should be a full git tag (e.g.
-//     `v0.3.0`), not an empty string.
+//   - **version**        – The yzma release version to use. The  default is whatever is associated with the current version of
+//     `hybridgroup/yzma`.  The value should be a full git tag (e.g. `v0.3.0`).
 //   - **model-root**     – Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root
 //     (`lib_path`) is used.
 //   - **llama-max-pixels** - The maximum number of pixels in an image to be embedded before it is automatically resized. Default is 400, 000.
@@ -104,6 +104,27 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	lib_path := u.Path
 	tmp_dir := ""
 
+	// https://github.com/hybridgroup/yzma#required-versions-of-llamacpp
+	// For the time being this will need to be manually kept in sync with
+	// the version of hybridgroup/yzma in go.mod. The only way to derive
+	// this programmatically is _after_ llama itself is loaded.
+	version := "v0.9.0"
+
+	if q.Has("version") {
+
+		v := q.Get("version")
+
+		err := download.VersionIsValid(v)
+
+		if err != nil {
+			return nil, fmt.Errorf("Invalid version, %w", err)
+		}
+
+		version = v
+	}
+
+	var model_root string
+
 	if lib_path == "" {
 		lib_path = os.Getenv("YZMA_LIB")
 	}
@@ -119,16 +140,24 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		lib_path = dir
 		tmp_dir = dir
 
+		model_root = filepath.Join(lib_path, "models")
+
 	} else {
+
+		// Ensure model root is outside of any versioned yzma folder
+
+		model_root = filepath.Join(lib_path, "models")
+
+		lib_path = filepath.Join(lib_path, version)
+		slog.Debug("Update lib path with version", "version", q.Get("version"), "path", lib_path)
 
 		err := os.MkdirAll(lib_path, 0750)
 
 		if err != nil {
+			slog.Error("Failed to create llama root", "path", lib_path, "error", err)
 			return nil, fmt.Errorf("Failed to create llama root, %w", err)
 		}
 	}
-
-	model_root := filepath.Join(lib_path, "models")
 
 	if q.Has("model-root") && q.Get("model-root") != "" {
 		model_root = q.Get("model-root")
@@ -152,17 +181,6 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			proc = "metal"
 		}
 
-		// "A tagged release of yzma installs its own llama.cpp release by default, so yzma install
-		// without the -version flag gets the version in this table. Use -version latest to get the
-		// most recent nightly build instead. A build from the main branch always uses the most recent
-		// nightly build." - https://github.com/hybridgroup/yzma#required-versions-of-llamacpp
-
-		version := ""
-
-		if q.Has("version") {
-			version = q.Get("version")
-		}
-
 		slog.Debug("Download llama", "arch", arch, "os", os, "proc", proc, "version", version)
 
 		err := download.GetWithContext(ctx, arch, os, proc, version, lib_path, download.DefaultProgressTracker())
@@ -172,11 +190,15 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		}
 	}
 
+	slog.Debug("Load llama", "path", lib_path)
+
 	err = llama.Load(lib_path)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
+
+	slog.Debug("llama initialized", "version", llama.Version())
 
 	context_sz := 0
 	batch_sz := 2048
@@ -560,15 +582,29 @@ func (e *YzmaEmbedder[T]) fetchModel(ctx context.Context, model_uri string) (str
 	model_fname := filepath.Base(model_uri)
 	model_path := filepath.Join(e.model_root, model_fname)
 
+	fetch_model := false
+
 	slog.Debug("Fetch model", "uri", model_uri, "path", model_path)
 
-	_, err := os.Stat(model_path)
+	info, err := os.Stat(model_path)
 
 	if err != nil {
 
 		if !os.IsNotExist(err) {
 			return "", err
 		}
+
+		slog.Debug("Model does not exist, fetch")
+		fetch_model = true
+	} else {
+
+		if info.Size() == 0 {
+			slog.Debug("Model has zero size, try to fetch again")
+			fetch_model = true
+		}
+	}
+
+	if fetch_model {
 
 		u, err := url.Parse(model_uri)
 

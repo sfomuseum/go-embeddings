@@ -19,9 +19,9 @@ type OpenCLIPEmbedder[T Float] struct {
 
 func init() {
 	ctx := context.Background()
-	RegisterEmbedder[float64](ctx, "openclip-client", NewOpenCLIPEmbedder)
-	RegisterEmbedder[float32](ctx, "openclip-client32", NewOpenCLIPEmbedder)
-	RegisterEmbedder[float64](ctx, "openclip-client64", NewOpenCLIPEmbedder)
+	MustRegisterEmbedder[float64](ctx, "openclip-client", NewOpenCLIPEmbedder)
+	MustRegisterEmbedder[float32](ctx, "openclip-client32", NewOpenCLIPEmbedder)
+	MustRegisterEmbedder[float64](ctx, "openclip-client64", NewOpenCLIPEmbedder)
 }
 
 func NewOpenCLIPEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
