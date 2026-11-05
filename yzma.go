@@ -78,8 +78,8 @@ func init() {
 //   - **ngl**            - GPU offload layer count. Default is -1.
 //   - **processor**      – Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will
 //     automatically select an appropriate processor.
-//   - **version**        – The yzma release version to download.  The  default is `"v0.3.0"`.  The value should be a full git tag (e.g.
-//     `v0.3.0`), not an empty string.
+//   - **version**        – The yzma release version to use. The  default is whatever is associated with the current version of
+//			    `hybridgroup/yzma`.  The value should be a full git tag (e.g. `v0.3.0`).
 //   - **model-root**     – Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root
 //     (`lib_path`) is used.
 //   - **llama-max-pixels** - The maximum number of pixels in an image to be embedded before it is automatically resized. Default is 400, 000.
