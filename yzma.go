@@ -79,7 +79,7 @@ func init() {
 //   - **processor**      – Target CPU instruction set for the downloaded yzma binary (e.g. `avx`, `neon`).  If omitted, the library will
 //     automatically select an appropriate processor.
 //   - **version**        – The yzma release version to use. The  default is whatever is associated with the current version of
-//			    `hybridgroup/yzma`.  The value should be a full git tag (e.g. `v0.3.0`).
+//     `hybridgroup/yzma`.  The value should be a full git tag (e.g. `v0.3.0`).
 //   - **model-root**     – Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root
 //     (`lib_path`) is used.
 //   - **llama-max-pixels** - The maximum number of pixels in an image to be embedded before it is automatically resized. Default is 400, 000.
@@ -190,7 +190,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		}
 	}
 
-	slog.Info("Load llama", "path", lib_path)
+	slog.Debug("Load llama", "path", lib_path)
 
 	err = llama.Load(lib_path)
 
@@ -198,7 +198,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
 
-	slog.Info("llama initialized", "version", llama.Version())
+	slog.Debug("llama initialized", "version", llama.Version())
 
 	context_sz := 0
 	batch_sz := 2048
@@ -582,15 +582,29 @@ func (e *YzmaEmbedder[T]) fetchModel(ctx context.Context, model_uri string) (str
 	model_fname := filepath.Base(model_uri)
 	model_path := filepath.Join(e.model_root, model_fname)
 
+	fetch_model := false
+
 	slog.Debug("Fetch model", "uri", model_uri, "path", model_path)
 
-	_, err := os.Stat(model_path)
+	info, err := os.Stat(model_path)
 
 	if err != nil {
 
 		if !os.IsNotExist(err) {
 			return "", err
 		}
+
+		slog.Debug("Model does not exist, fetch")
+		fetch_model = true
+	} else {
+
+		if info.Size() == 0 {
+			slog.Debug("Model has zero size, try to fetch again")
+			fetch_model = true
+		}
+	}
+
+	if fetch_model {
 
 		u, err := url.Parse(model_uri)
 
