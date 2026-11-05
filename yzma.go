@@ -140,6 +140,8 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, fmt.Errorf("Failed to create model root, %w", err)
 	}
 
+	// To do: read yzma-install.json
+	
 	if !download.AlreadyInstalled(lib_path) {
 
 		// https://pkg.go.dev/github.com/hybridgroup/yzma@v1.25.0/pkg/download#Install
@@ -172,12 +174,16 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		}
 	}
 
+	slog.Info("Load llama", "path", lib_path)
+	
 	err = llama.Load(lib_path)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load %s, %w", lib_path, err)
 	}
 
+	slog.Info("llama initialized", "version", llama.Version())
+	
 	context_sz := 0
 	batch_sz := 2048
 	ngpu_layers := -1
