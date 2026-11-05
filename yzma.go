@@ -51,9 +51,9 @@ type YzmaEmbedder[T Float] struct {
 func init() {
 	ctx := context.Background()
 
-	RegisterEmbedder[float32](ctx, "yzma", NewYzmaEmbedder[float32])
-	RegisterEmbedder[float32](ctx, "yzma32", NewYzmaEmbedder[float32])
-	RegisterEmbedder[float64](ctx, "yzma64", NewYzmaEmbedder[float64])
+	MustRegisterEmbedder[float32](ctx, "yzma", NewYzmaEmbedder[float32])
+	MustRegisterEmbedder[float32](ctx, "yzma32", NewYzmaEmbedder[float32])
+	MustRegisterEmbedder[float64](ctx, "yzma64", NewYzmaEmbedder[float64])
 }
 
 // NewYzmaEmbedder creates a new YzmaEmbedder based on the provided URI.
@@ -104,6 +104,27 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	lib_path := u.Path
 	tmp_dir := ""
 
+	// https://github.com/hybridgroup/yzma#required-versions-of-llamacpp
+	// For the time being this will need to be manually kept in sync with
+	// the version of hybridgroup/yzma in go.mod. The only way to derive
+	// this programmatically is _after_ llama itself is loaded.
+	version := "v0.9.0"
+
+	if q.Has("version") {
+
+		v := q.Get("version")
+
+		err := download.VersionIsValid(v)
+
+		if err != nil {
+			return nil, fmt.Errorf("Invalid version, %w", err)
+		}
+
+		version = v
+	}
+
+	var model_root string
+
 	if lib_path == "" {
 		lib_path = os.Getenv("YZMA_LIB")
 	}
@@ -119,16 +140,24 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		lib_path = dir
 		tmp_dir = dir
 
+		model_root = filepath.Join(lib_path, "models")
+
 	} else {
+
+		// Ensure model root is outside of any versioned yzma folder
+
+		model_root = filepath.Join(lib_path, "models")
+
+		lib_path = filepath.Join(lib_path, version)
+		slog.Debug("Update lib path with version", "version", q.Get("version"), "path", lib_path)
 
 		err := os.MkdirAll(lib_path, 0750)
 
 		if err != nil {
+			slog.Error("Failed to create llama root", "path", lib_path, "error", err)
 			return nil, fmt.Errorf("Failed to create llama root, %w", err)
 		}
 	}
-
-	model_root := filepath.Join(lib_path, "models")
 
 	if q.Has("model-root") && q.Get("model-root") != "" {
 		model_root = q.Get("model-root")
@@ -140,8 +169,6 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		return nil, fmt.Errorf("Failed to create model root, %w", err)
 	}
 
-	// To do: read yzma-install.json
-	
 	if !download.AlreadyInstalled(lib_path) {
 
 		// https://pkg.go.dev/github.com/hybridgroup/yzma@v1.25.0/pkg/download#Install
@@ -154,17 +181,6 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			proc = "metal"
 		}
 
-		// "A tagged release of yzma installs its own llama.cpp release by default, so yzma install
-		// without the -version flag gets the version in this table. Use -version latest to get the
-		// most recent nightly build instead. A build from the main branch always uses the most recent
-		// nightly build." - https://github.com/hybridgroup/yzma#required-versions-of-llamacpp
-
-		version := ""
-
-		if q.Has("version") {
-			version = q.Get("version")
-		}
-
 		slog.Debug("Download llama", "arch", arch, "os", os, "proc", proc, "version", version)
 
 		err := download.GetWithContext(ctx, arch, os, proc, version, lib_path, download.DefaultProgressTracker())
@@ -175,7 +191,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	}
 
 	slog.Info("Load llama", "path", lib_path)
-	
+
 	err = llama.Load(lib_path)
 
 	if err != nil {
@@ -183,7 +199,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	}
 
 	slog.Info("llama initialized", "version", llama.Version())
-	
+
 	context_sz := 0
 	batch_sz := 2048
 	ngpu_layers := -1

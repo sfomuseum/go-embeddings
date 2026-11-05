@@ -22,9 +22,9 @@ type MLXClipEmbedder[T Float] struct {
 
 func init() {
 	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "mlxclip", NewMLXClipEmbedder)
-	RegisterEmbedder[float32](ctx, "mlxclip32", NewMLXClipEmbedder)
-	RegisterEmbedder[float64](ctx, "mlxclip64", NewMLXClipEmbedder)
+	MustRegisterEmbedder[float32](ctx, "mlxclip", NewMLXClipEmbedder)
+	MustRegisterEmbedder[float32](ctx, "mlxclip32", NewMLXClipEmbedder)
+	MustRegisterEmbedder[float64](ctx, "mlxclip64", NewMLXClipEmbedder)
 }
 
 func NewMLXClipEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {

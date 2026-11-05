@@ -11,9 +11,9 @@ import (
 
 func init() {
 	ctx := context.Background()
-	RegisterEmbedder[float32](ctx, "mlxclip-client", NewMLXClipLocalClientEmbedder)
-	RegisterEmbedder[float32](ctx, "mlxclip-client32", NewMLXClipLocalClientEmbedder)
-	RegisterEmbedder[float64](ctx, "mlxclip-client64", NewMLXClipLocalClientEmbedder)
+	MustRegisterEmbedder[float32](ctx, "mlxclip-client", NewMLXClipLocalClientEmbedder)
+	MustRegisterEmbedder[float32](ctx, "mlxclip-client32", NewMLXClipLocalClientEmbedder)
+	MustRegisterEmbedder[float64](ctx, "mlxclip-client64", NewMLXClipLocalClientEmbedder)
 }
 
 type MLXClipLocalClientEmbedder[T Float] struct {

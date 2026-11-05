@@ -17,9 +17,9 @@ type NullEmbedder[T Float] struct {
 func init() {
 	ctx := context.Background()
 
-	RegisterEmbedder[float32](ctx, "null", NewNullEmbedder[float32])
-	RegisterEmbedder[float32](ctx, "null32", NewNullEmbedder[float32])
-	RegisterEmbedder[float64](ctx, "null64", NewNullEmbedder[float64])
+	MustRegisterEmbedder[float32](ctx, "null", NewNullEmbedder[float32])
+	MustRegisterEmbedder[float32](ctx, "null32", NewNullEmbedder[float32])
+	MustRegisterEmbedder[float64](ctx, "null64", NewNullEmbedder[float64])
 }
 
 func NewNullEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
