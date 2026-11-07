@@ -5,7 +5,7 @@ package embeddings
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,8 +75,7 @@ func (o *ollamaClient) embeddings(ctx context.Context, model string, input strin
 
 	var emb_rsp *ollamaEmbeddingsResponse
 
-	dec := json.NewDecoder(rsp)
-	err = dec.Decode(&emb_rsp)
+	err = json.UnmarshalRead(rsp, &emb_rsp)
 
 	if err != nil {
 		return nil, err

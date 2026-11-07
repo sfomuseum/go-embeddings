@@ -2,7 +2,7 @@ package embeddings
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -139,8 +139,7 @@ func RunWithFlagSet(ctx context.Context, fs *flag.FlagSet) error {
 		return fmt.Errorf("Failed to derive embeddings, %v", embeddings_err)
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	err := enc.Encode(embeddings_rsp)
+	err := json.MarshalWrite(os.Stdout, embeddings_rsp)
 
 	if err != nil {
 		return fmt.Errorf("Failed to encode embeddings, %v", err)

@@ -194,6 +194,7 @@ Valid query parameters are:
 | Name | Value | Required | Notes |
 | --- | --- | --- | --- |
 | client-uri | string | no | The URI for the `llamacpp` HTTP server endpoint. Default is `http://localhost:9931`. |
+| max-pixel-size | int | no | If greater than 0, nsure images are less than, or resized to, a maximum pixel value. Default is 0. |
 
 For example:
 

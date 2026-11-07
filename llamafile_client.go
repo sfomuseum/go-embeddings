@@ -3,7 +3,7 @@ package embeddings
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -131,8 +131,7 @@ func (e *llamafileClient) embeddings(ctx context.Context, llamafile_req *llamafi
 
 	var llamafile_rsp *llamafileEmbeddingResponse
 
-	dec := json.NewDecoder(rsp.Body)
-	err = dec.Decode(&llamafile_rsp)
+	err = json.UnmarshalRead(rsp.Body, &llamafile_rsp)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w", err)

@@ -12,7 +12,7 @@ type EmbeddingsResponse[T Float] interface {
 }
 
 type CommonEmbeddingsResponse[T Float] struct {
-	EmbeddingsResponse[T] `json:",omitempty"`
+	EmbeddingsResponse[T] `json:"response,omitempty"`
 	CommonId              string `json:"id,omitempty"`
 	CommonEmbeddings      []T    `json:"embeddings"`
 	CommonModel           string `json:"model"`

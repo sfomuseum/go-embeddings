@@ -2,7 +2,7 @@ package embeddings
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/url"
 	"os"
@@ -180,8 +180,7 @@ func (e *MLXClipEmbedder[T]) generate_embeddings(ctx context.Context, req *Embed
 
 	var emb_rsp *MLXClipEmbeddingsResponse
 
-	dec := json.NewDecoder(r)
-	err = dec.Decode(&emb_rsp)
+	err = json.UnmarshalRead(r, &emb_rsp)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w (%s)", err, tmp.Name())

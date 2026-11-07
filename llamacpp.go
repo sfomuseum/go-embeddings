@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -13,9 +14,10 @@ import (
 // LlamaCppEmbedder implements the `Embedder` interface using an LlamaCpp API endpoint to derive embeddings.
 type LlamaCppEmbedder[T Float] struct {
 	Embedder[T]
-	client    *llamaCppClient
-	model     string
-	precision string
+	client         *llamaCppClient
+	model          string
+	precision      string
+	max_pixel_size int
 }
 
 func init() {
@@ -66,10 +68,28 @@ func NewLlamaCppEmbedder[T Float](ctx context.Context, uri string) (Embedder[T],
 		precision = fmt.Sprintf("%s#as-float%d", precision, 64)
 	}
 
+	max_pixel_size := 0
+
+	if q.Has("max-pixel-size") {
+
+		v, err := strconv.Atoi(q.Get("max-pixel-size"))
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse ?max-pixel-size parameter, %w", err)
+		}
+
+		if v < 0 {
+			return nil, fmt.Errorf("Invalid ?max-pixel-size parameter")
+		}
+
+		max_pixel_size = v
+	}
+
 	e := &LlamaCppEmbedder[T]{
-		client:    cl,
-		model:     model,
-		precision: precision,
+		client:         cl,
+		model:          model,
+		precision:      precision,
+		max_pixel_size: max_pixel_size,
 	}
 
 	return e, nil
@@ -89,6 +109,21 @@ func (e *LlamaCppEmbedder[T]) getEmbeddings(ctx context.Context, embeddings_type
 
 	if req.Model != "" {
 		model = req.Model
+	}
+
+	switch embeddings_type {
+	case "image":
+
+		if e.max_pixel_size > 0 {
+
+			body, err := ResizeIfOversized(req.Body, e.max_pixel_size)
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to resize request body, %w", err)
+			}
+
+			req.Body = body
+		}
 	}
 
 	// Note: Munging model in anticipation of a time when llama.cpp allows Ollama-style model toggling

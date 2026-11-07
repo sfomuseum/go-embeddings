@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -147,8 +147,7 @@ func (o *llamaCppClient) embeddings(ctx context.Context, model string, embedding
 
 	var emb_rsp *llamaCppEmbeddingsResponse
 
-	dec := json.NewDecoder(rsp)
-	err = dec.Decode(&emb_rsp)
+	err = json.UnmarshalRead(rsp, &emb_rsp)
 
 	if err != nil {
 		return nil, err

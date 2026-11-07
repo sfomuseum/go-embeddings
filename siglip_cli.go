@@ -2,7 +2,7 @@ package embeddings
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/url"
 	"os"
@@ -161,8 +161,7 @@ func (e *SigLIPCommandLineEmbedder[T]) generateEmbeddingsFromCommandLine(ctx con
 
 	var e64 []float64
 
-	dec := json.NewDecoder(r)
-	err = dec.Decode(&e64)
+	err = json.UnmarshalRead(r, &e64)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w (%s)", err, tmp.Name())

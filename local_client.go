@@ -6,7 +6,7 @@ package embeddings
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	_ "log/slog"
 	"net/http"
@@ -150,8 +150,7 @@ func (e *LocalClient) embeddings(ctx context.Context, local_req *LocalClientEmbe
 
 	var local_rsp *LocalClientEmbeddingResponse
 
-	dec := json.NewDecoder(rsp.Body)
-	err = dec.Decode(&local_rsp)
+	err = json.UnmarshalRead(rsp.Body, &local_rsp)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal embeddings, %w", err)
