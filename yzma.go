@@ -120,6 +120,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			return nil, fmt.Errorf("Invalid version, %w", err)
 		}
 
+		slog.Debug("Assign yzma version", "version", v)
 		version = v
 	}
 
@@ -234,6 +235,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			return nil, fmt.Errorf("Invalid ?context-size parameter, %w", err)
 		}
 
+		slog.Debug("Assign context size", "value", v)
 		context_sz = v
 	}
 
@@ -245,6 +247,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			return nil, fmt.Errorf("Invalid ?batch-size parameter, %w", err)
 		}
 
+		slog.Debug("Assign batch size", "value", v)
 		batch_sz = v
 	}
 
@@ -257,11 +260,14 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 			return nil, fmt.Errorf("Invalid ?ngl parameter, %w", err)
 		}
 
+		slog.Debug("Assign ngpu layers", "value", v)
 		ngpu_layers = v
 	}
 
 	if q.Has("pooling") {
 		pooling = q.Get("pooling")
+
+		slog.Debug("Assign pooling", "value", pooling)
 	}
 
 	var pooling_type llama.PoolingType
@@ -291,6 +297,8 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 
 		max_pixels = v
 	}
+
+	slog.Debug("Create embedder", "precision", precision, "context size", context_sz, "batch size", batch_sz, "pooling", pooling_type)
 
 	e := &YzmaEmbedder[T]{
 		precision:        precision,
