@@ -364,7 +364,8 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 		return nil, fmt.Errorf("Decode operation returned non-zero response, %d", ret)
 	}
 
-	nEmbd := llama.ModelNEmbd(model)
+	// Use the output size: it can differ from n_embd (e.g. embeddinggemma-2: 768 vs 512).
+	nEmbd := llama.ModelNEmbdOut(model)
 
 	vec, err := llama.GetEmbeddingsSeq(emb_ctx, 0, nEmbd)
 
@@ -524,7 +525,8 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 
 	// 12. Read vector mapping state layers out from your execution block
 
-	nEmbd := llama.ModelNEmbd(model)
+	// Use the output size: it can differ from n_embd (e.g. embeddinggemma-2: 768 vs 512).
+	nEmbd := llama.ModelNEmbdOut(model)
 
 	vec, err := llama.GetEmbeddingsSeq(emb_ctx, 0, nEmbd)
 
