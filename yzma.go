@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hybridgroup/yzma/pkg/download"
@@ -46,6 +47,62 @@ type YzmaEmbedder[T Float] struct {
 	llama_max_pixels int
 	// enable verbose llama.cpp logging
 	llama_verbose bool
+	// max_slots is the maximum number of llama contexts (concurrent requests) per model.
+	max_slots int
+	// models caches loaded models, keyed by the model URI in the request.
+	models    map[string]*yzmaModel
+	models_mu sync.Mutex
+	// mtmd_once ensures the mtmd library is loaded only once.
+	mtmd_once sync.Once
+	mtmd_err  error
+}
+
+// yzmaModel is a loaded model plus a pool of reusable slots. Weights are shared; each slot has its own
+// llama context (and lazily created multimodal context) because those are not thread-safe.
+type yzmaModel struct {
+	model llama.Model
+	// idle holds slots that are not in use.
+	idle chan *yzmaSlot
+	// mu guards `created`.
+	mu      sync.Mutex
+	created int
+	max     int
+}
+
+type yzmaSlot struct {
+	ctx      llama.Context
+	mtmd_ctx mtmd.Context
+}
+
+func (s *yzmaSlot) free() {
+
+	if s.mtmd_ctx != 0 {
+		mtmd.Free(s.mtmd_ctx)
+		s.mtmd_ctx = 0
+	}
+
+	if s.ctx != 0 {
+		llama.Free(s.ctx)
+		s.ctx = 0
+	}
+}
+
+// reset clears any state left in the context's memory by a previous request.
+func (s *yzmaSlot) reset() {
+
+	mem, err := llama.GetMemory(s.ctx)
+
+	if err != nil || mem == 0 {
+		// Non-causal embedding models may have no KV cache to clear.
+		return
+	}
+
+	// Metadata only; zeroing the (potentially huge) data buffers is needlessly slow.
+	err = llama.MemoryClear(mem, false)
+
+	if err != nil {
+		slog.Debug("Failed to clear context memory", "error", err)
+	}
 }
 
 func init() {
@@ -84,6 +141,7 @@ func init() {
 //     (`lib_path`) is used.
 //   - **llama-max-pixels** - The maximum number of pixels in an image to be embedded before it is automatically resized. Default is 400, 000.
 //   - **llama-verbose**  - Enable verbose llama.cpp logging.
+//   - **slots**         - Maximum number of concurrent llama contexts per model. Default is 4.
 func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
@@ -207,6 +265,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	pooling := "mean"
 	max_pixels := 400000
 	llama_verbose := false
+	max_slots := 4
 
 	if q.Has("llama-verbose") {
 
@@ -264,6 +323,17 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		ngpu_layers = v
 	}
 
+	if q.Has("slots") {
+
+		v, err := strconv.Atoi(q.Get("slots"))
+
+		if err != nil || v < 1 {
+			return nil, fmt.Errorf("Invalid ?slots parameter, %w", err)
+		}
+
+		max_slots = v
+	}
+
 	if q.Has("pooling") {
 		pooling = q.Get("pooling")
 
@@ -312,6 +382,8 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 		lib_path:         lib_path,
 		llama_verbose:    llama_verbose,
 		llama_max_pixels: max_pixels,
+		models:           make(map[string]*yzmaModel),
+		max_slots:        max_slots,
 	}
 
 	return e, nil
@@ -324,29 +396,20 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 
 	// https://github.com/hybridgroup/yzma/blob/main/examples/embeddings/main.go
 
-	model, err := e.getModelForRequest(ctx, req)
+	entry, slot, err := e.acquireSlot(ctx, req)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to instantiate model, %w", err)
 	}
 
-	defer llama.ModelFree(model)
+	defer entry.release(slot)
+
+	model := entry.model
+	emb_ctx := slot.ctx
+
+	slot.reset()
 
 	body := string(req.Body)
-
-	model_ctx := llama.ContextDefaultParams()
-	model_ctx.NCtx = uint32(e.context_sz)
-	model_ctx.NBatch = uint32(e.batch_sz)
-	model_ctx.PoolingType = e.pooling_type
-	model_ctx.Embeddings = 1
-
-	emb_ctx, err := llama.InitFromModel(model, model_ctx)
-
-	if err != nil {
-		return nil, fmt.Errorf("Unable to initialize context from model, %w", err)
-	}
-
-	defer llama.Free(emb_ctx)
 
 	vocab := llama.ModelGetVocab(model)
 
@@ -364,7 +427,8 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 		return nil, fmt.Errorf("Decode operation returned non-zero response, %d", ret)
 	}
 
-	nEmbd := llama.ModelNEmbd(model)
+	// Use the output size: it can differ from n_embd (e.g. embeddinggemma-2: 768 vs 512).
+	nEmbd := llama.ModelNEmbdOut(model)
 
 	vec, err := llama.GetEmbeddingsSeq(emb_ctx, 0, nEmbd)
 
@@ -379,85 +443,24 @@ func (e *YzmaEmbedder[T]) TextEmbeddings(ctx context.Context, req *EmbeddingsReq
 // It uses the correct yzma/mtmd pipeline variables and function signatures.
 func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRequest) (EmbeddingsResponse[T], error) {
 
-	err := mtmd.Load(e.lib_path)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to load mtmd library from %s, %w", e.lib_path, err)
-	}
-
-	if !e.llama_verbose {
-		mtmd.LogSet(llama.LogSilent())
-	}
-
-	model, err := e.getModelForRequest(ctx, req)
+	entry, slot, err := e.acquireSlot(ctx, req)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to instantiate model, %w", err)
 	}
 
-	defer llama.ModelFree(model)
+	defer entry.release(slot)
 
-	model_ctx := llama.ContextDefaultParams()
-	model_ctx.NCtx = uint32(e.context_sz)
-	model_ctx.NBatch = uint32(e.batch_sz)
-	model_ctx.PoolingType = e.pooling_type
-	model_ctx.Embeddings = 1
+	model := entry.model
+	emb_ctx := slot.ctx
 
-	emb_ctx, err := llama.InitFromModel(model, model_ctx)
-
-	if err != nil {
-		return nil, fmt.Errorf("Unable to initialize context from model, %w", err)
-	}
-	defer llama.Free(emb_ctx)
-
-	// 4. Resolve the location framework matching the projector binary
-
-	u, err := url.Parse(req.Model)
+	mtmd_ctx, err := e.getMtmdContext(ctx, req, entry, slot)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var mmproj_uri string
-
-	switch u.Scheme {
-	case "http", "https":
-
-		model_root := filepath.Dir(u.Path)
-		model_fname := filepath.Base(u.Path)
-		mmproj_fname := "mmproj-" + model_fname
-
-		u.Path = filepath.Join(model_root, mmproj_fname)
-		mmproj_uri = u.String()
-
-	case "file":
-
-		model_root := filepath.Dir(req.Model)
-		model_fname := filepath.Base(req.Model)
-		mmproj_fname := "mmproj-" + model_fname
-
-		mmproj_uri = filepath.Join(model_root, mmproj_fname)
-	default:
-		return nil, fmt.Errorf("Unsupported model scheme")
-	}
-
-	mmproj_path, err := e.fetchModel(ctx, mmproj_uri)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to fetch multimodal model %s, %w", mmproj_uri, err)
-	}
-
-	// 5. Instantiate multimodal parsing layers
-
-	mtmd_params := mtmd.ContextParamsDefault()
-
-	mtmd_ctx, err := mtmd.InitFromFile(mmproj_path, model, mtmd_params)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize multimodal context, %w", err)
-	}
-
-	defer mtmd.Free(mtmd_ctx)
+	slot.reset()
 
 	im_body, err := ResizeIfOversized(req.Body, e.llama_max_pixels)
 
@@ -465,28 +468,12 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 		return nil, err
 	}
 
-	tmp_im, err := os.CreateTemp("", "yzma-img-*.jpg")
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to create temporary image cache file, %w", err)
+	if len(im_body) == 0 {
+		return nil, fmt.Errorf("Empty image body")
 	}
 
-	defer os.Remove(tmp_im.Name())
-	defer tmp_im.Close()
-
-	_, err = tmp_im.Write(im_body)
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to write image data to temporary file, %w", err)
-	}
-
-	err = tmp_im.Close()
-
-	if err != nil {
-		return nil, fmt.Errorf("Failed to close temporary file after writing, %w", err)
-	}
-
-	bitmap := mtmd.BitmapInitFromFile(mtmd_ctx, tmp_im.Name(), false, mtmd.InitOptDefault())
+	// Decode directly from memory rather than round-tripping through a temporary file.
+	bitmap := mtmd.BitmapInitFromBuf(mtmd_ctx, &im_body[0], uint64(len(im_body)), false, mtmd.InitOptDefault())
 
 	if bitmap.Bitmap == 0 {
 		return nil, fmt.Errorf("Failed to construct image layout matrix from file")
@@ -512,19 +499,90 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 		return nil, fmt.Errorf("Multimodal Tokenize operations returned error status: %d", tokenize_rsp)
 	}
 
-	// 11. Run evaluation matrices using explicit sequence tracking arguments
+	// 11. Like llama-server for non-causal embedding models, put the text tokens (BOS) and the
+	// projected image embeddings in a single batch so the pooled vector covers all of them.
 
-	var last_pos llama.Pos
+	batch, err := llama.BatchExtInit(emb_ctx)
 
-	eval_rsp := mtmd.HelperEvalChunks(mtmd_ctx, emb_ctx, output_chunks, 0, 0, int32(model_ctx.NBatch), true, &last_pos)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create batch, %w", err)
+	}
 
-	if eval_rsp != 0 {
-		return nil, fmt.Errorf("Multimodal image token layer evaluation failed with status, %d", eval_rsp)
+	defer llama.BatchExtFree(batch)
+
+	n_embd_inp := int(llama.ModelNEmbdInp(model))
+
+	var pos llama.Pos
+
+	add := func(idx int32, err error) error {
+
+		if err != nil {
+			return err
+		}
+
+		err = llama.BatchExtSetPos(batch, idx, pos)
+
+		if err != nil {
+			return err
+		}
+
+		pos++
+		return llama.BatchExtSetOutputEmbd(batch, idx, true)
+	}
+
+	for i := uint64(0); i < mtmd.InputChunksSize(output_chunks); i++ {
+
+		chunk := mtmd.InputChunksGet(output_chunks, i)
+
+		switch mtmd.InputChunkGetType(chunk) {
+		case mtmd.InputChunkTypeText:
+
+			for _, token := range mtmd.InputChunkGetTokensText(chunk) {
+
+				err := add(llama.BatchExtAddToken(batch, 0, token))
+
+				if err != nil {
+					return nil, fmt.Errorf("Failed to add text token to batch, %w", err)
+				}
+			}
+
+		default:
+
+			err := mtmd.EncodeChunk(mtmd_ctx, chunk)
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to encode image chunk, %w", err)
+			}
+
+			n_tokens := int(mtmd.InputChunkGetNTokens(chunk))
+
+			image_embd, err := mtmd.GetOutputEmbd(mtmd_ctx, int32(n_embd_inp*n_tokens))
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to read image embeddings, %w", err)
+			}
+
+			for row := 0; row < n_tokens; row++ {
+
+				err := add(llama.BatchExtAddEmbd(batch, 0, image_embd[row*n_embd_inp:(row+1)*n_embd_inp], n_embd_inp))
+
+				if err != nil {
+					return nil, fmt.Errorf("Failed to add image embedding to batch, %w", err)
+				}
+			}
+		}
+	}
+
+	eval_rsp, err := llama.Process(emb_ctx, llama.ProcessTypeDecode, batch)
+
+	if err != nil || eval_rsp != 0 {
+		return nil, fmt.Errorf("Multimodal image token layer evaluation failed with status %d, %w", eval_rsp, err)
 	}
 
 	// 12. Read vector mapping state layers out from your execution block
 
-	nEmbd := llama.ModelNEmbd(model)
+	// Use the output size: it can differ from n_embd (e.g. embeddinggemma-2: 768 vs 512).
+	nEmbd := llama.ModelNEmbdOut(model)
 
 	vec, err := llama.GetEmbeddingsSeq(emb_ctx, 0, nEmbd)
 
@@ -535,8 +593,17 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 	return e.generateResponse(req, vec)
 }
 
-// Close releases resources held by the yzma backend.  It also removes any temporary directories that were created for downloading the yzma binary.
+// Close releases resources held by the yzma backend. It also removes any temporary directories that were created for downloading the yzma binary.
 func (e *YzmaEmbedder[T]) Close() error {
+
+	e.models_mu.Lock()
+
+	for uri, entry := range e.models {
+		entry.free()
+		delete(e.models, uri)
+	}
+
+	e.models_mu.Unlock()
 
 	llama.Close()
 
@@ -551,6 +618,172 @@ func (e *YzmaEmbedder[T]) Close() error {
 	}
 
 	return nil
+}
+
+// acquireSlot returns the cached model for the request (loading it on first use) and a slot to run
+// it on, creating a new context if none is idle and the pool isn't full, otherwise waiting for one.
+// The caller must call `entry.release(slot)`.
+func (e *YzmaEmbedder[T]) acquireSlot(ctx context.Context, req *EmbeddingsRequest) (*yzmaModel, *yzmaSlot, error) {
+
+	e.models_mu.Lock()
+
+	entry, ok := e.models[req.Model]
+
+	if !ok {
+
+		model, err := e.getModelForRequest(ctx, req)
+
+		if err != nil {
+			e.models_mu.Unlock()
+			return nil, nil, err
+		}
+
+		entry = &yzmaModel{
+			model: model,
+			idle:  make(chan *yzmaSlot, e.max_slots),
+			max:   e.max_slots,
+		}
+
+		e.models[req.Model] = entry
+	}
+
+	e.models_mu.Unlock()
+
+	select {
+	case slot := <-entry.idle:
+		return entry, slot, nil
+	default:
+	}
+
+	entry.mu.Lock()
+	can_create := entry.created < entry.max
+
+	if can_create {
+		entry.created++
+	}
+
+	entry.mu.Unlock()
+
+	if can_create {
+
+		model_ctx := llama.ContextDefaultParams()
+		model_ctx.NCtx = uint32(e.context_sz)
+		model_ctx.NBatch = uint32(e.batch_sz)
+		model_ctx.PoolingType = e.pooling_type
+		model_ctx.Embeddings = 1
+
+		emb_ctx, err := llama.InitFromModel(entry.model, model_ctx)
+
+		if err != nil {
+
+			entry.mu.Lock()
+			entry.created--
+			entry.mu.Unlock()
+
+			return nil, nil, fmt.Errorf("Unable to initialize context from model, %w", err)
+		}
+
+		return entry, &yzmaSlot{ctx: emb_ctx}, nil
+	}
+
+	select {
+	case slot := <-entry.idle:
+		return entry, slot, nil
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+}
+
+func (m *yzmaModel) release(s *yzmaSlot) {
+	m.idle <- s
+}
+
+// free releases all idle slots and the model. It must only be called when no requests are in flight.
+func (m *yzmaModel) free() {
+
+	for {
+		select {
+		case s := <-m.idle:
+			s.free()
+			continue
+		default:
+		}
+
+		break
+	}
+
+	if m.model != 0 {
+		llama.ModelFree(m.model)
+		m.model = 0
+	}
+}
+
+// getMtmdContext returns the multimodal context for the entry, creating it (and loading the mtmd
+// library) on first use. The caller must own `slot`.
+func (e *YzmaEmbedder[T]) getMtmdContext(ctx context.Context, req *EmbeddingsRequest, entry *yzmaModel, slot *yzmaSlot) (mtmd.Context, error) {
+
+	e.mtmd_once.Do(func() {
+
+		e.mtmd_err = mtmd.Load(e.lib_path)
+
+		if e.mtmd_err == nil && !e.llama_verbose {
+			mtmd.LogSet(llama.LogSilent())
+		}
+	})
+
+	if e.mtmd_err != nil {
+		return 0, fmt.Errorf("Failed to load mtmd library from %s, %w", e.lib_path, e.mtmd_err)
+	}
+
+	if slot.mtmd_ctx != 0 {
+		return slot.mtmd_ctx, nil
+	}
+
+	// Resolve the location of the projector matching the model
+
+	u, err := url.Parse(req.Model)
+
+	if err != nil {
+		return 0, err
+	}
+
+	var mmproj_uri string
+
+	switch u.Scheme {
+	case "http", "https":
+
+		model_root := filepath.Dir(u.Path)
+		model_fname := filepath.Base(u.Path)
+		mmproj_fname := "mmproj-" + model_fname
+
+		u.Path = filepath.Join(model_root, mmproj_fname)
+		mmproj_uri = u.String()
+
+	case "file":
+
+		model_root := filepath.Dir(req.Model)
+		model_fname := filepath.Base(req.Model)
+		mmproj_fname := "mmproj-" + model_fname
+
+		mmproj_uri = filepath.Join(model_root, mmproj_fname)
+	default:
+		return 0, fmt.Errorf("Unsupported model scheme")
+	}
+
+	mmproj_path, err := e.fetchModel(ctx, mmproj_uri)
+
+	if err != nil {
+		return 0, fmt.Errorf("Failed to fetch multimodal model %s, %w", mmproj_uri, err)
+	}
+
+	mtmd_ctx, err := mtmd.InitFromFile(mmproj_path, entry.model, mtmd.ContextParamsDefault())
+
+	if err != nil {
+		return 0, fmt.Errorf("Failed to initialize multimodal context, %w", err)
+	}
+
+	slot.mtmd_ctx = mtmd_ctx
+	return mtmd_ctx, nil
 }
 
 // getModelForRequest ensures that the model referenced in the request exists
