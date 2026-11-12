@@ -513,14 +513,84 @@ func (e *YzmaEmbedder[T]) ImageEmbeddings(ctx context.Context, req *EmbeddingsRe
 		return nil, fmt.Errorf("Multimodal Tokenize operations returned error status: %d", tokenize_rsp)
 	}
 
-	// 11. Run evaluation matrices using explicit sequence tracking arguments
+	// 11. Like llama-server for non-causal embedding models, put the text tokens (BOS) and the
+	// projected image embeddings in a single batch so the pooled vector covers all of them.
 
-	var last_pos llama.Pos
+	batch, err := llama.BatchExtInit(emb_ctx)
 
-	eval_rsp := mtmd.HelperEvalChunks(mtmd_ctx, emb_ctx, output_chunks, 0, 0, int32(model_ctx.NBatch), true, &last_pos)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create batch, %w", err)
+	}
 
-	if eval_rsp != 0 {
-		return nil, fmt.Errorf("Multimodal image token layer evaluation failed with status, %d", eval_rsp)
+	defer llama.BatchExtFree(batch)
+
+	n_embd_inp := int(llama.ModelNEmbdInp(model))
+
+	var pos llama.Pos
+
+	add := func(idx int32, err error) error {
+
+		if err != nil {
+			return err
+		}
+
+		err = llama.BatchExtSetPos(batch, idx, pos)
+
+		if err != nil {
+			return err
+		}
+
+		pos++
+		return llama.BatchExtSetOutputEmbd(batch, idx, true)
+	}
+
+	for i := uint64(0); i < mtmd.InputChunksSize(output_chunks); i++ {
+
+		chunk := mtmd.InputChunksGet(output_chunks, i)
+
+		switch mtmd.InputChunkGetType(chunk) {
+		case mtmd.InputChunkTypeText:
+
+			for _, token := range mtmd.InputChunkGetTokensText(chunk) {
+
+				err := add(llama.BatchExtAddToken(batch, 0, token))
+
+				if err != nil {
+					return nil, fmt.Errorf("Failed to add text token to batch, %w", err)
+				}
+			}
+
+		default:
+
+			err := mtmd.EncodeChunk(mtmd_ctx, chunk)
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to encode image chunk, %w", err)
+			}
+
+			n_tokens := int(mtmd.InputChunkGetNTokens(chunk))
+
+			image_embd, err := mtmd.GetOutputEmbd(mtmd_ctx, int32(n_embd_inp*n_tokens))
+
+			if err != nil {
+				return nil, fmt.Errorf("Failed to read image embeddings, %w", err)
+			}
+
+			for row := 0; row < n_tokens; row++ {
+
+				err := add(llama.BatchExtAddEmbd(batch, 0, image_embd[row*n_embd_inp:(row+1)*n_embd_inp], n_embd_inp))
+
+				if err != nil {
+					return nil, fmt.Errorf("Failed to add image embedding to batch, %w", err)
+				}
+			}
+		}
+	}
+
+	eval_rsp, err := llama.Process(emb_ctx, llama.ProcessTypeDecode, batch)
+
+	if err != nil || eval_rsp != 0 {
+		return nil, fmt.Errorf("Multimodal image token layer evaluation failed with status %d, %v", eval_rsp, err)
 	}
 
 	// 12. Read vector mapping state layers out from your execution block
