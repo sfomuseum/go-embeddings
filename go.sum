@@ -119,8 +119,8 @@ github.com/hashicorp/go-getter v1.8.6 h1:9sQboWULaydVphxc4S64oAI4YqpuCk7nPmvbk13
 github.com/hashicorp/go-getter v1.8.6/go.mod h1:nVH12eOV2P58dIiL3rsU6Fh3wLeJEKBOJzhMmzlSWoo=
 github.com/hashicorp/go-version v1.8.0 h1:KAkNb1HAiZd1ukkxDFGmokVZe1Xy9HG6NUp+bPle2i4=
 github.com/hashicorp/go-version v1.8.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
-github.com/hybridgroup/yzma v1.32.0 h1:rs4/D8xK494V3u5ky0vZU4mHZ1J7BbhjERVyYZAk8+U=
-github.com/hybridgroup/yzma v1.32.0/go.mod h1:ovV3WQ5v3X53vqo9Izg/28QHEXaVasW9b4Kgkhk05T0=
+github.com/hybridgroup/yzma v1.33.0 h1:mouJYpgdWx9i94Lu4ZCDJBpw9Jb1EaXQjl168r0bAjM=
+github.com/hybridgroup/yzma v1.33.0/go.mod h1:ovV3WQ5v3X53vqo9Izg/28QHEXaVasW9b4Kgkhk05T0=
 github.com/jupiterrider/ffi v0.8.0 h1:IH6lto8OZaRIulQYObtZibII4tq71hXT6Z+KLBcxCcQ=
 github.com/jupiterrider/ffi v0.8.0/go.mod h1:9dauhpOfNqrqk28fxuu0kkdeFtT9Qr4vbfigiuIXN7c=
 github.com/klauspost/compress v1.20.2 h1:v5tiZvm1KGLyg5d5oXdXe3lsSPrbEUiKoXGia//I7Qo=
