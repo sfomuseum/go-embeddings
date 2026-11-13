@@ -1,5 +1,6 @@
 *~
 bin
+build
 work
 go.work*
 .DS_Store
