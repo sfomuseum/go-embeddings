@@ -19,6 +19,8 @@ import (
 	"github.com/hybridgroup/yzma/pkg/mtmd"
 )
 
+const YZMA_LLAMACPP_VERSION string = "v1.0.0"
+
 // YzmaEmbedder implements the `Embedder` interface using the `hybridgroup/yzma` package to derive embeddings.
 type YzmaEmbedder[T Float] struct {
 	Embedder[T]
@@ -166,7 +168,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	// For the time being this will need to be manually kept in sync with
 	// the version of hybridgroup/yzma in go.mod. The only way to derive
 	// this programmatically is _after_ llama itself is loaded.
-	version := "v0.9.0"
+	version := YZMA_LLAMACPP_VERSION
 
 	if q.Has("version") {
 
