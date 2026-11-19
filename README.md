@@ -4,7 +4,7 @@ Go package defining a common interface for generating text and image embeddings.
 
 ## Documentation
 
-`godoc` is currently incomplete.
+[![Go Reference](https://pkg.go.dev/badge/github.com/sfomuseum/go-embeddings.svg)](https://pkg.go.dev/github.com/sfomuseum/go-embeddings)
 
 ## Motivation
 
