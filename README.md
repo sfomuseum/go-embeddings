@@ -605,7 +605,7 @@ Where `{PATH_TO_YZMA}` is the path the yzma-specific llama.cpp build. If empty t
 | model-root | string | no | Directory where the llama model files are stored.  If omitted, a subdirectory `models` of the library root (`lib_path`) is used. |
 | llama-max-pixels | int | no | The maximum number of pixels an image can have before it is automatically resized. Default is 400, 000. |
 | llama-verbose | bool | no | Enable verbose llama.cpp logging. |
-| slots | int | no | The maximum number of llama contexts (concurrent requests) per model. Default is 4. |
+| slots | int | no | The maximum number of llama contexts (concurrent requests) per model. Default is 5. |
 For example:
 
 ```
@@ -651,12 +651,6 @@ $> ./bin/embeddings \
 
 {"embeddings":[-0.015751032,-0.015909415,0.023781637,0.012932265,-0.029196 ... and so on
 ```
-
-#### Notes
-
-##### embeddinggemma-2
-
-For "computer reasons" the `embeddinggemma-2` model returns 512-dimension embeddings (instead of the default 768) when run through `llama.cpp` (which is what the `yzma` embedder is using under the hood). It also producing _noticeably_ weird and inconsistent (incorrect) similarity results when compared to the [API-based `llamacpp://` embedder](#llamacpp), described above. This could very easily be caused by coding errors on my part. I haven't figured it out yet.
 
 #### See also
 

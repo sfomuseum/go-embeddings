@@ -143,7 +143,7 @@ func init() {
 //     (`lib_path`) is used.
 //   - **llama-max-pixels** - The maximum number of pixels in an image to be embedded before it is automatically resized. Default is 400, 000.
 //   - **llama-verbose**  - Enable verbose llama.cpp logging.
-//   - **slots**         - Maximum number of concurrent llama contexts per model. Default is 4.
+//   - **slots**         - Maximum number of concurrent llama contexts per model. Default is 5.
 func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], error) {
 
 	u, err := url.Parse(uri)
@@ -267,7 +267,7 @@ func NewYzmaEmbedder[T Float](ctx context.Context, uri string) (Embedder[T], err
 	pooling := "mean"
 	max_pixels := 400000
 	llama_verbose := false
-	max_slots := 4
+	max_slots := 5
 
 	if q.Has("llama-verbose") {
 
